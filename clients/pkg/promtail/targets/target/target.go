@@ -38,6 +38,8 @@ const (
 
 	// CloudflareTargetType is a Cloudflare target
 	CloudflareTargetType = TargetType("Cloudflare")
+
+	TokioTargetType = TargetType("Tokio")
 )
 
 // Target is a promtail scrape target

@@ -45,6 +45,7 @@ type Config struct {
 	CloudflareConfig       *CloudflareConfig          `yaml:"cloudflare,omitempty"`
 	RelabelConfigs         []*relabel.Config          `yaml:"relabel_configs,omitempty"`
 	ServiceDiscoveryConfig ServiceDiscoveryConfig     `yaml:",inline"`
+	TokioConfig            *TokioConfig               `yaml:"tokio,omitempty"`
 }
 
 type ServiceDiscoveryConfig struct {
@@ -329,6 +330,11 @@ type CloudflareConfig struct {
 	// - extended
 	// - all
 	FieldsType string `yaml:"fields_type"`
+}
+
+type TokioConfig struct {
+	Addr string `yaml:"addr"`
+	Labels model.LabelSet `yaml:"labels"`
 }
 
 // GcplogTargetConfig describes a scrape config to pull logs from any pubsub topic.
