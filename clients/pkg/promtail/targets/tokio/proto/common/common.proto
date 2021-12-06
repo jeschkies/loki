@@ -3,8 +3,8 @@ syntax = "proto3";
 package common;
 option go_package = "github.com/grafana/loki/clients/pkg/promtail/targets/tokio/proto/common";
 
-import "google/protobuf/timestamp/timestamp.proto";
-import "google/protobuf/duration.proto";
+import "google/timestamp.proto";
+import "google/duration.proto";
 
 message Id {
     uint64 id = 1;
@@ -53,7 +53,7 @@ message Span {
     SpanId id = 1;
     MetaId metadata_id = 2;
     repeated Field fields = 3;
-    google.protobuf.Timestamp at = 4;
+    google.Timestamp at = 4;
 }
 
 message RegisterMetadata {
@@ -103,7 +103,7 @@ message PollStats {
     //
     // Subtracting this timestamp from `created_at` can be used to calculate the
     // time to first poll for this object, a measurement of executor latency.
-    google.protobuf.Timestamp first_poll = 3;
+    google.Timestamp first_poll = 3;
     // The timestamp of the most recent time this objects's poll method was invoked.
     //
     // If this is `None`, the object has not yet been polled.
@@ -111,18 +111,18 @@ message PollStats {
     // If the object has only been polled a single time, then this value may be
     // equal to the `first_poll` timestamp.
     //
-    google.protobuf.Timestamp last_poll_started = 4;
+    google.Timestamp last_poll_started = 4;
     // The timestamp of the most recent time this objects's poll method finished execution.
     //
     // If this is `None`, the object has not yet been polled or is currently being polled.
     //
     // If the object does not exist anymore, then this is the time the final invocation of
     // its poll method has completed.
-    google.protobuf.Timestamp last_poll_ended = 5;
+    google.Timestamp last_poll_ended = 5;
     // The total duration this object was being *actively polled*, summed across
     // all polls. Note that this includes only polls that have completed and is
     // not reflecting any inprogress polls. Subtracting `busy_time` from the
     // total lifetime of the polled object results in the amount of time it
     // has spent *waiting* to be polled.
-    google.protobuf.Duration busy_time = 6;
+    google.Duration busy_time = 6;
 }

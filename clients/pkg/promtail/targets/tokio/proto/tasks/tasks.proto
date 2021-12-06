@@ -3,8 +3,8 @@ syntax = "proto3";
 package tasks;
 option go_package = "github.com/grafana/loki/clients/pkg/promtail/targets/tokio/proto/tasks";
 
-import "google/protobuf/timestamp/timestamp.proto";
-import "google/protobuf/duration.proto";
+import "google/timestamp.proto";
+import "google/duration.proto";
 import "common/common.proto";
 
 // A task state update.
@@ -34,7 +34,7 @@ message TaskDetails {
     // The task's ID which the details belong to.
     common.Id task_id = 1;
 
-    google.protobuf.Timestamp now = 2;
+    google.Timestamp now = 2;
 
     // HdrHistogram.rs `Histogram` serialized to binary in the V2 format
     bytes poll_times_histogram = 3;
@@ -87,9 +87,9 @@ message Task {
 // Task performance statistics.
 message Stats {
     // Timestamp of when the task was spawned.
-    google.protobuf.Timestamp created_at = 1;
+    google.Timestamp created_at = 1;
     // Timestamp of when the task was dropped.
-    google.protobuf.Timestamp dropped_at = 2;
+    google.Timestamp dropped_at = 2;
     // The total number of times this task's waker has been woken.
     uint64 wakes = 3;
     // The total number of times this task's waker has been cloned.
@@ -99,7 +99,7 @@ message Stats {
     // The timestamp of the most recent time this task has been woken.
     //
     // If this is `None`, the task has not yet been woken.
-    google.protobuf.Timestamp last_wake = 6;
+    google.Timestamp last_wake = 6;
     // Contains task poll statistics.
     common.PollStats poll_stats = 7;
     // The total number of times this task has woken itself.

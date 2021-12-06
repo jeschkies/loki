@@ -340,7 +340,7 @@ endif
 # Protobufs #
 #############
 
-perotos: clean-protos $(PROTO_GOS)
+protos: clean-protos $(PROTO_GOS)
 
 %.pb.go:
 ifeq ($(BUILD_IN_CONTAINER),true)
