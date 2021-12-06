@@ -340,7 +340,7 @@ endif
 # Protobufs #
 #############
 
-protos: clean-protos $(PROTO_GOS)
+perotos: clean-protos $(PROTO_GOS)
 
 %.pb.go:
 ifeq ($(BUILD_IN_CONTAINER),true)
@@ -357,7 +357,7 @@ else
 			protoc -I ./vendor:./$(@D) --gogoslick_out=plugins=grpc:./vendor ./$(patsubst %.pb.go,%.proto,$@); \
 			;;					\
 		*)						\
-			protoc -I .:./vendor:./$(@D) --gogoslick_out=Mgoogle/protobuf/timestamp.proto=github.com/gogo/protobuf/types,plugins=grpc,paths=source_relative:./ ./$(patsubst %.pb.go,%.proto,$@); \
+			protoc -I .:./vendor:./$(@D) --proto_path=./clients/pkg/promtail/targets/tokio/proto --gogoslick_out=Mgoogle/protobuf/timestamp.proto=github.com/gogo/protobuf/types,plugins=grpc,paths=source_relative:./ ./$(patsubst %.pb.go,%.proto,$@); \
 			;;					\
 		esac
 endif

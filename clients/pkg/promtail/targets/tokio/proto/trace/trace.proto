@@ -1,0 +1,51 @@
+syntax = "proto3";
+
+package trace;
+option go_package = "github.com/grafana/loki/clients/pkg/promtail/targets/tokio/proto/trace";
+
+import "google/protobuf/timestamp/timestamp.proto";
+import "common/common.proto";
+
+service Trace {
+    rpc Watch(WatchRequest) returns (stream TraceEvent) {}
+}
+
+// Start watching trace events with the provided filter.
+message WatchRequest {
+    string filter = 1;
+}
+
+// A trace event
+message TraceEvent {
+    oneof event {
+        // A new thread was registered.
+        RegisterThreads register_thread = 1;
+        // A new span metadata was registered.
+        common.RegisterMetadata register_metadata = 2;
+        common.Span new_span = 3;
+        Enter enter_span = 4;
+        Exit exit_span = 5;
+        Close close_span = 6;
+    };
+
+    message RegisterThreads {
+        map<uint64, string> names = 1;
+    }
+
+    message Enter {
+        common.SpanId span_id = 1;
+        uint64 thread_id = 2;
+        google.protobuf.Timestamp at = 3;
+    }
+
+    message Exit {
+        common.SpanId span_id = 1;
+        uint64 thread_id = 2;
+        google.protobuf.Timestamp at = 3;
+    }
+
+    message Close {
+        common.SpanId span_id = 1;
+        google.protobuf.Timestamp at = 2;
+    }
+}
