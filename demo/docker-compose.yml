@@ -1,0 +1,31 @@
+version: '3.4'
+services:
+  loki:
+    image: 'grafana/loki:2.4.1'
+    command:
+    - "-config.file=/mnt/config/loki-config.yaml"
+    - "-log.level=debug"
+    - "-target=all"
+    ports:
+    - 127.0.0.1:3100:3100
+    volumes:
+    - ./loki-config.yaml:/mnt/config/loki-config.yaml:z
+
+  grafana:
+    image: grafana/grafana
+    ports:
+    - 127.0.0.1:3000:3000
+    entrypoint:
+      - sh
+      - -euc
+      - |
+        cat > /etc/grafana/provisioning/datasources/enterprise-logs.yaml <<EOF
+        apiVersion: 1
+        datasources:
+          - name: Loki
+            type: loki
+            access: proxy
+            orgID: 1
+            url: http://loki:3100
+        EOF
+        exec /run.sh

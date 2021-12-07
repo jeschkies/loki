@@ -70,7 +70,6 @@ func (t *Target) start() {
 
 	go func() {
 		for t.ctx.Err() == nil {
-			level.Debug(t.logger).Log("msg", "wait for next update")
 			update, err := watchUpdates.Recv()
 			if err != nil {
 				level.Error(t.logger).Log("msg", "failed to pull update", "err", err)
@@ -86,7 +85,7 @@ func (t *Target) start() {
 
 			ts := time.Now().UnixNano()
 	
-			level.Debug(t.logger).Log("msg", "processed update", "update", line)
+			level.Debug(t.logger).Log("msg", "processed update", "ts", ts)
 
 			t.handler.Chan() <- api.Entry{
 				Labels: t.config.Labels.Clone(),
