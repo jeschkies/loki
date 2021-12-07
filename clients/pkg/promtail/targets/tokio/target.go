@@ -34,15 +34,17 @@ func NewTarget(
 	handler api.EntryHandler,
 	config  *scrapeconfig.TokioConfig,
 ) (*Target, error) {
-	cc , err := grpc.Dial(config.Addr)
+	cc , err := grpc.Dial(config.Addr, grpc.WithInsecure())
+	level.Debug(logger).Log("msg", "connected to Tokio consoler API", "address", config.Addr)
 	if err != nil {
+		level.Error(logger).Log("msg", "could not connect to Tokio consoler", "address", config.Addr, "err", err)
 		return nil, err
 	}
 
 	client := insturment.NewInstrumentClient(cc)
 	ctx, cancel := context.WithCancel(context.Background())
 
-	return &Target{
+	t := &Target{
 		logger:    logger,
 		handler:   handler,
 		config:    config,
@@ -50,7 +52,9 @@ func NewTarget(
 		client: client,
 		ctx: ctx,
 		cancel: cancel,
-	}, nil
+	}
+	t.start()
+	return t, nil
 }
 
 func (t *Target) start() {
@@ -60,8 +64,11 @@ func (t *Target) start() {
 		return
 	}
 
+	level.Debug(t.logger).Log("msg", "watching updates")
+
 	go func() {
-		for t.ctx.Err() != nil {
+		for t.ctx.Err() == nil {
+			level.Debug(t.logger).Log("msg", "wait for next update")
 			update, err := watchUpdates.Recv()
 			if err != nil {
 				level.Error(t.logger).Log("msg", "failed to pull update", "err", err)
@@ -76,6 +83,8 @@ func (t *Target) start() {
 			}
 
 			ts := time.Now().UnixNano()
+	
+			level.Debug(t.logger).Log("msg", "processed update", "update", line)
 
 			t.handler.Chan() <- api.Entry{
 				Labels: t.config.Labels.Clone(),
@@ -85,6 +94,7 @@ func (t *Target) start() {
 				},
 			}
 		}
+		level.Error(t.logger).Log("msg", "update loop context failed", "err", t.ctx.Err())
 	}()
 }
 
