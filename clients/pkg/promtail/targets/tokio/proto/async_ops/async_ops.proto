@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package async_ops;
+package rs.tokio.console.async_ops;
 
 option go_package = "github.com/grafana/loki/clients/pkg/promtail/targets/tokio/proto/async_ops";
 
@@ -44,9 +44,9 @@ message AsyncOp {
 
 message Stats {
     // Timestamp of when the async op has been created.
-    google.Timestamp created_at = 1;
+    google.protobuf.Timestamp created_at = 1;
     // Timestamp of when the async op was dropped.
-    google.Timestamp dropped_at = 2;
+    google.protobuf.Timestamp dropped_at = 2;
     // The resource Id this `AsyncOp` is associated with. Note that both
     // `resource_id` and `task_id` can be None if this async op has not been polled yet
     common.Id resource_id = 3;

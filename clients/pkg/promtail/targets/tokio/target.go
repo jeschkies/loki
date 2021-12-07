@@ -23,7 +23,8 @@ type Target struct {
 	handler   api.EntryHandler
 	config    *scrapeconfig.TokioConfig
 
-	client insturment.InstrumentClient
+	client instrument.InstrumentClient
+	conn   *grpc.ClientConn 
 	ctx    context.Context
 	cancel context.CancelFunc
 	err    error
@@ -41,7 +42,7 @@ func NewTarget(
 		return nil, err
 	}
 
-	client := insturment.NewInstrumentClient(cc)
+	client := instrument.NewInstrumentClient(cc)
 	ctx, cancel := context.WithCancel(context.Background())
 
 	t := &Target{
@@ -50,6 +51,7 @@ func NewTarget(
 		config:    config,
 
 		client: client,
+		conn: cc,
 		ctx: ctx,
 		cancel: cancel,
 	}
@@ -58,7 +60,7 @@ func NewTarget(
 }
 
 func (t *Target) start() {
-	watchUpdates, err := t.client.WatchUpdates(t.ctx, &insturment.InstrumentRequest{})
+	watchUpdates, err := t.client.WatchUpdates(t.ctx, &instrument.InstrumentRequest{})
 	if err != nil {
 		t.err = err
 		return
@@ -100,6 +102,7 @@ func (t *Target) start() {
 
 func (t *Target) Stop() {
 	t.cancel()
+	t.conn.Close()
 	t.handler.Stop()
 }
 

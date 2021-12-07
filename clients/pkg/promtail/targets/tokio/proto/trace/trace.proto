@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package trace;
+package rs.tokio.console.trace;
 option go_package = "github.com/grafana/loki/clients/pkg/promtail/targets/tokio/proto/trace";
 
 import "google/timestamp.proto";
@@ -35,17 +35,17 @@ message TraceEvent {
     message Enter {
         common.SpanId span_id = 1;
         uint64 thread_id = 2;
-        google.Timestamp at = 3;
+        google.protobuf.Timestamp at = 3;
     }
 
     message Exit {
         common.SpanId span_id = 1;
         uint64 thread_id = 2;
-        google.Timestamp at = 3;
+        google.protobuf.Timestamp at = 3;
     }
 
     message Close {
         common.SpanId span_id = 1;
-        google.Timestamp at = 2;
+        google.protobuf.Timestamp at = 2;
     }
 }

@@ -1,7 +1,7 @@
 syntax = "proto3";
 
-package instrument;
-option go_package = "github.com/grafana/loki/clients/pkg/promtail/targets/tokio/proto/insturment";
+package rs.tokio.console.instrument;
+option go_package = "github.com/grafana/loki/clients/pkg/promtail/targets/tokio/proto/instrument";
 
 import "google/timestamp.proto";
 import "common/common.proto";
@@ -45,7 +45,7 @@ message Update {
     //
     // This is the timestamp any durations in the included `Stats` were
     // calculated relative to.
-    google.Timestamp now = 1;
+    google.protobuf.Timestamp now = 1;
 
     // Task state update.
     tasks.TaskUpdate task_update = 2;
