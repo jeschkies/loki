@@ -29,3 +29,14 @@ services:
             url: http://loki:3100
         EOF
         exec /run.sh
+
+  tokio:
+    build:
+      context: .
+      dockerfile: tokio.dockerfile
+    ports:
+    - 6668 
+    environment:
+      RUST_LOG: debug
+      TOKIO_CONSOLE_BIND: 127.0.0.1:6668
+    command: ["blocks", "coma", "burn"]
