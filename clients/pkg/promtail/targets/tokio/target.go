@@ -62,6 +62,7 @@ func NewTarget(
 func (t *Target) start() {
 	watchUpdates, err := t.client.WatchUpdates(t.ctx, &instrument.InstrumentRequest{})
 	if err != nil {
+		level.Error(t.logger).Log("msg", "failed to watch updates", "err", err)
 		t.err = err
 		return
 	}

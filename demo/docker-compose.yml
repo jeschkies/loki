@@ -35,8 +35,18 @@ services:
       context: .
       dockerfile: tokio.dockerfile
     ports:
-    - 6668 
+    - 127.0.0.1:6668:6668 
     environment:
       RUST_LOG: debug
-      TOKIO_CONSOLE_BIND: 127.0.0.1:6668
+      TOKIO_CONSOLE_BIND: tokio:6668
     command: ["blocks", "coma", "burn"]
+
+  promtail:
+    depends_on:
+      - tokio
+    build:
+      context: ../
+      dockerfile: ./demo/promtail.dockerfile
+    command: ["-config.file=/etc/promtail/config.yaml", "-log.level=debug"]
+    volumes:
+      - ./promtail.yaml:/etc/promtail/config.yaml:z

@@ -2,11 +2,11 @@ server:
   disable: true
 
 clients:
-  - url: http://localhost:3100/loki/api/v1/push
+  - url: http://loki:3100/loki/api/v1/push
 
 scrape_configs:
 - job_name: tokio
   tokio:
-    addr: '127.0.0.1:6668'
+    addr: 'tokio:6668'
     labels:
       job: 'rust'
