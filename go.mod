@@ -42,7 +42,7 @@ require (
 	github.com/gogo/status v1.1.0
 	github.com/golang/protobuf v1.5.2
 	github.com/golang/snappy v0.0.4
-	github.com/google/go-cmp v0.5.7
+	github.com/google/go-cmp v0.5.8
 	github.com/google/renameio/v2 v2.0.0
 	github.com/google/uuid v1.2.0
 	github.com/gorilla/mux v1.8.0
@@ -96,12 +96,12 @@ require (
 	go.uber.org/atomic v1.9.0
 	go.uber.org/goleak v1.1.12
 	golang.org/x/crypto v0.0.0-20211215153901-e495a2d5b3d3
-	golang.org/x/net v0.0.0-20220127200216-cd36cc0744dd
+	golang.org/x/net v0.0.0-20220425223048-2871e0cb64e4
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
-	golang.org/x/sys v0.0.0-20220222172238-00053529121e
+	golang.org/x/sys v0.0.0-20220503163025-988cb79eb6c6
 	golang.org/x/time v0.0.0-20220210224613-90d013bbcef8
-	google.golang.org/api v0.70.0
-	google.golang.org/grpc v1.44.0
+	google.golang.org/api v0.80.0
+	google.golang.org/grpc v1.46.0
 	gopkg.in/alecthomas/kingpin.v2 v2.2.6
 	gopkg.in/fsnotify.v1 v1.4.7
 	gopkg.in/yaml.v2 v2.4.0
@@ -112,7 +112,7 @@ require (
 
 require (
 	cloud.google.com/go v0.100.2 // indirect
-	cloud.google.com/go/compute v1.3.0 // indirect
+	cloud.google.com/go/compute v1.6.1 // indirect
 	cloud.google.com/go/iam v0.1.0 // indirect
 	cloud.google.com/go/kms v1.0.0 // indirect
 	github.com/Azure/azure-sdk-for-go v62.0.0+incompatible // indirect
@@ -180,7 +180,7 @@ require (
 	github.com/google/go-querystring v1.0.0 // indirect
 	github.com/google/gofuzz v1.1.0 // indirect
 	github.com/google/pprof v0.0.0-20220218203455-0368bd9e19a7 // indirect
-	github.com/googleapis/gax-go/v2 v2.1.1 // indirect
+	github.com/googleapis/gax-go/v2 v2.3.0 // indirect
 	github.com/googleapis/gnostic v0.4.1 // indirect
 	github.com/gophercloud/gophercloud v0.24.0 // indirect
 	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.0.0-rc.2.0.20201207153454-9f6bf00c00a7 // indirect
@@ -259,14 +259,14 @@ require (
 	go4.org/intern v0.0.0-20211027215823-ae77deb06f29 // indirect
 	go4.org/unsafe/assume-no-moving-gc v0.0.0-20211027215541-db492cf91b37 // indirect
 	golang.org/x/mod v0.5.1 // indirect
-	golang.org/x/oauth2 v0.0.0-20211104180415-d3ed0bb246c8 // indirect
+	golang.org/x/oauth2 v0.0.0-20220411215720-9780585627b5 // indirect
 	golang.org/x/term v0.0.0-20210927222741-03fcf44c2211 // indirect
 	golang.org/x/text v0.3.7 // indirect
 	golang.org/x/tools v0.1.9 // indirect
-	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
+	golang.org/x/xerrors v0.0.0-20220411194840-2f41105eb62f // indirect
 	google.golang.org/appengine v1.6.7 // indirect
-	google.golang.org/genproto v0.0.0-20220222154240-daf995802d7b // indirect
-	google.golang.org/protobuf v1.27.1 // indirect
+	google.golang.org/genproto v0.0.0-20220505152158-f39f71e6c8f3 // indirect
+	google.golang.org/protobuf v1.28.0 // indirect
 	gopkg.in/fsnotify/fsnotify.v1 v1.4.7 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/ini.v1 v1.57.0 // indirect
