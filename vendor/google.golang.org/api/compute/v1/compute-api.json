@@ -7308,7 +7308,7 @@
           ]
         },
         "listManagedInstances": {
-          "description": "Lists all of the instances in the managed instance group. Each instance in the list has a currentAction, which indicates the action that the managed instance group is performing on the instance. For example, if the group is still creating an instance, the currentAction is CREATING. If a previous action failed, the list displays the errors for that failed action. The orderBy query parameter is not supported.",
+          "description": "Lists all of the instances in the managed instance group. Each instance in the list has a currentAction, which indicates the action that the managed instance group is performing on the instance. For example, if the group is still creating an instance, the currentAction is CREATING. If a previous action failed, the list displays the errors for that failed action. The orderBy query parameter is not supported. The `pageToken` query parameter is supported only in the alpha and beta API and only if the group's `listManagedInstancesResults` field is set to `PAGINATED`.",
           "flatPath": "projects/{project}/zones/{zone}/instanceGroupManagers/{instanceGroupManager}/listManagedInstances",
           "httpMethod": "POST",
           "id": "compute.instanceGroupManagers.listManagedInstances",
@@ -19492,7 +19492,7 @@
           ]
         },
         "listManagedInstances": {
-          "description": "Lists the instances in the managed instance group and instances that are scheduled to be created. The list includes any current actions that the group has scheduled for its instances. The orderBy query parameter is not supported.",
+          "description": "Lists the instances in the managed instance group and instances that are scheduled to be created. The list includes any current actions that the group has scheduled for its instances. The orderBy query parameter is not supported. The `pageToken` query parameter is supported only in the alpha and beta API and only if the group's `listManagedInstancesResults` field is set to `PAGINATED`.",
           "flatPath": "projects/{project}/regions/{region}/instanceGroupManagers/{instanceGroupManager}/listManagedInstances",
           "httpMethod": "POST",
           "id": "compute.regionInstanceGroupManagers.listManagedInstances",
@@ -31172,7 +31172,7 @@
       }
     }
   },
-  "revision": "20220526",
+  "revision": "20220614",
   "rootUrl": "https://compute.googleapis.com/",
   "schemas": {
     "AcceleratorConfig": {
@@ -34987,11 +34987,13 @@
           "description": "[Output Only] Status of the commitment with regards to eventual expiration (each commitment has an end date defined). One of the following values: NOT_YET_ACTIVE, ACTIVE, EXPIRED.",
           "enum": [
             "ACTIVE",
+            "CANCELLED",
             "CREATING",
             "EXPIRED",
             "NOT_YET_ACTIVE"
           ],
           "enumDescriptions": [
+            "",
             "",
             "",
             "",
@@ -37933,7 +37935,7 @@
           "type": "string"
         },
         "ipVersion": {
-          "description": "The IP Version that will be used by this forwarding rule. Valid options are IPV4 or IPV6. This can only be specified for an external global forwarding rule.",
+          "description": "The IP Version that will be used by this forwarding rule. Valid options are IPV4 or IPV6.",
           "enum": [
             "IPV4",
             "IPV6",
@@ -38043,6 +38045,7 @@
           "enum": [
             "ACCEPTED",
             "CLOSED",
+            "NEEDS_ATTENTION",
             "PENDING",
             "REJECTED",
             "STATUS_UNSPECIFIED"
@@ -38050,6 +38053,7 @@
           "enumDescriptions": [
             "The connection has been accepted by the producer.",
             "The connection has been closed by the producer and will not serve traffic going forward.",
+            "The connection has been accepted by the producer, but the producer needs to take further action before the forwarding rule can serve traffic.",
             "The connection is pending acceptance by the producer.",
             "The connection has been rejected by the producer.",
             ""
@@ -40776,6 +40780,20 @@
           "format": "uint64",
           "type": "string"
         },
+        "keyRevocationActionType": {
+          "description": "KeyRevocationActionType of the instance. Supported options are \"STOP\" and \"NONE\". The default value is \"NONE\" if it is not specified.",
+          "enum": [
+            "KEY_REVOCATION_ACTION_TYPE_UNSPECIFIED",
+            "NONE",
+            "STOP"
+          ],
+          "enumDescriptions": [
+            "Default value. This value is unused.",
+            "Indicates user chose no operation.",
+            "Indicates user chose to opt for VM shutdown on key revocation."
+          ],
+          "type": "string"
+        },
         "kind": {
           "default": "compute#instance",
           "description": "[Output Only] Type of the resource. Always compute#instance for instances.",
@@ -43076,6 +43094,20 @@
             "$ref": "AcceleratorConfig"
           },
           "type": "array"
+        },
+        "keyRevocationActionType": {
+          "description": "KeyRevocationActionType of the instance. Supported options are \"STOP\" and \"NONE\". The default value is \"NONE\" if it is not specified.",
+          "enum": [
+            "KEY_REVOCATION_ACTION_TYPE_UNSPECIFIED",
+            "NONE",
+            "STOP"
+          ],
+          "enumDescriptions": [
+            "Default value. This value is unused.",
+            "Indicates user chose no operation.",
+            "Indicates user chose to opt for VM shutdown on key revocation."
+          ],
+          "type": "string"
         },
         "labels": {
           "additionalProperties": {
@@ -45399,6 +45431,10 @@
     "LocationPolicyLocation": {
       "id": "LocationPolicyLocation",
       "properties": {
+        "constraints": {
+          "$ref": "LocationPolicyLocationConstraints",
+          "description": "Constraints that the caller requires on the result distribution in this zone."
+        },
         "preference": {
           "description": "Preference for a given location.",
           "enum": [
@@ -45412,6 +45448,18 @@
             "Default value, unused."
           ],
           "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "LocationPolicyLocationConstraints": {
+      "description": "Per-zone constraints on location policy for this zone.",
+      "id": "LocationPolicyLocationConstraints",
+      "properties": {
+        "maxCount": {
+          "description": "Maximum number of items that are allowed to be placed in this zone. The value must be non-negative.",
+          "format": "int32",
+          "type": "integer"
         }
       },
       "type": "object"
@@ -57902,6 +57950,7 @@
           "enum": [
             "ACCEPTED",
             "CLOSED",
+            "NEEDS_ATTENTION",
             "PENDING",
             "REJECTED",
             "STATUS_UNSPECIFIED"
@@ -57909,6 +57958,7 @@
           "enumDescriptions": [
             "The connection has been accepted by the producer.",
             "The connection has been closed by the producer.",
+            "The connection has been accepted by the producer, but the producer needs to take further action before the forwarding rule can serve traffic.",
             "The connection is pending acceptance by the producer.",
             "The consumer is still connected but not using the connection.",
             ""
@@ -58595,6 +58645,20 @@
             "$ref": "AcceleratorConfig"
           },
           "type": "array"
+        },
+        "keyRevocationActionType": {
+          "description": "KeyRevocationActionType of the instance. Supported options are \"STOP\" and \"NONE\". The default value is \"NONE\" if it is not specified.",
+          "enum": [
+            "KEY_REVOCATION_ACTION_TYPE_UNSPECIFIED",
+            "NONE",
+            "STOP"
+          ],
+          "enumDescriptions": [
+            "Default value. This value is unused.",
+            "Indicates user chose no operation.",
+            "Indicates user chose to opt for VM shutdown on key revocation."
+          ],
+          "type": "string"
         },
         "labels": {
           "additionalProperties": {
@@ -63829,6 +63893,13 @@
           "format": "int32",
           "type": "integer"
         },
+        "ruleMappings": {
+          "description": "Information about mappings provided by rules in this NAT.",
+          "items": {
+            "$ref": "VmEndpointNatMappingsInterfaceNatMappingsNatRuleMappings"
+          },
+          "type": "array"
+        },
         "sourceAliasIpRange": {
           "description": "Alias IP range for this interface endpoint. It will be a private (RFC 1918) IP range. Examples: \"10.33.4.55/32\", or \"192.168.5.0/24\".",
           "type": "string"
@@ -63836,6 +63907,42 @@
         "sourceVirtualIp": {
           "description": "Primary IP of the VM for this NIC.",
           "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "VmEndpointNatMappingsInterfaceNatMappingsNatRuleMappings": {
+      "description": "Contains information of NAT Mappings provided by a NAT Rule.",
+      "id": "VmEndpointNatMappingsInterfaceNatMappingsNatRuleMappings",
+      "properties": {
+        "drainNatIpPortRanges": {
+          "description": "List of all drain IP:port-range mappings assigned to this interface by this rule. These ranges are inclusive, that is, both the first and the last ports can be used for NAT. Example: [\"2.2.2.2:12345-12355\", \"1.1.1.1:2234-2234\"].",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "natIpPortRanges": {
+          "description": "A list of all IP:port-range mappings assigned to this interface by this rule. These ranges are inclusive, that is, both the first and the last ports can be used for NAT. Example: [\"2.2.2.2:12345-12355\", \"1.1.1.1:2234-2234\"].",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "numTotalDrainNatPorts": {
+          "description": "Total number of drain ports across all NAT IPs allocated to this interface by this rule. It equals the aggregated port number in the field drain_nat_ip_port_ranges.",
+          "format": "int32",
+          "type": "integer"
+        },
+        "numTotalNatPorts": {
+          "description": "Total number of ports across all NAT IPs allocated to this interface by this rule. It equals the aggregated port number in the field nat_ip_port_ranges.",
+          "format": "int32",
+          "type": "integer"
+        },
+        "ruleNumber": {
+          "description": "Rule number of the NAT Rule.",
+          "format": "int32",
+          "type": "integer"
         }
       },
       "type": "object"
