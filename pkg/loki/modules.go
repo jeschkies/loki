@@ -345,6 +345,7 @@ func (t *Loki) initQuerier() (services.Service, error) {
 	// we disable the proxying of the tail routes in initQueryFrontend() and we still want these routes regiestered
 	// on the external router.
 	alwaysExternalHandlers := map[string]http.Handler{
+		"/loki/api/v1/read": http.HandlerFunc(t.querierAPI.ReadHandler),
 		"/loki/api/v1/tail": http.HandlerFunc(t.querierAPI.TailHandler),
 		"/api/prom/tail":    http.HandlerFunc(t.querierAPI.TailHandler),
 	}
@@ -751,6 +752,7 @@ func (t *Loki) initQueryFrontend() (_ services.Service, err error) {
 	// Only register tailing requests if this process does not act as a Querier
 	// If this process is also a Querier the Querier will register the tail endpoints.
 	if !t.isModuleActive(Querier) {
+		t.Server.HTTP.Path("/loki/api/v1/read").Methods("GET", "POST").Handler(defaultHandler)
 		// defer tail endpoints to the default handler
 		t.Server.HTTP.Path("/loki/api/v1/tail").Methods("GET", "POST").Handler(defaultHandler)
 		t.Server.HTTP.Path("/api/prom/tail").Methods("GET", "POST").Handler(defaultHandler)

@@ -16,8 +16,10 @@ import (
 
 	"github.com/grafana/dskit/tenant"
 
+	"github.com/grafana/loki/pkg/iter"
 	"github.com/grafana/loki/pkg/loghttp"
 	loghttp_legacy "github.com/grafana/loki/pkg/loghttp/legacy"
+	"github.com/grafana/loki/pkg/logproto"
 	"github.com/grafana/loki/pkg/logql"
 	"github.com/grafana/loki/pkg/logql/syntax"
 	"github.com/grafana/loki/pkg/logqlmodel"
@@ -247,6 +249,139 @@ func (q *QuerierAPI) LabelHandler(w http.ResponseWriter, r *http.Request) {
 		serverutil.WriteError(err, w)
 		return
 	}
+}
+
+// See ingester/instance.go
+const (
+	queryBatchSize       = 128
+	queryBatchSampleSize = 512
+)
+
+// ReadHandler is a http.HandlerFunc for handling remote read queries.
+func (q *QuerierAPI) ReadHandler(w http.ResponseWriter, r *http.Request) {
+	upgrader := websocket.Upgrader{
+		CheckOrigin: func(r *http.Request) bool { return true },
+	}
+	logger := util_log.WithContext(r.Context(), util_log.Logger)
+	request, err := loghttp.ParseRangeQuery(r)
+	if err != nil {
+		serverutil.WriteError(httpgrpc.Errorf(http.StatusBadRequest, err.Error()), w)
+		return
+	}
+
+	params := logql.SelectLogParams{
+		QueryRequest: &logproto.QueryRequest{
+			Start:     request.Start,
+			End:       request.End,
+			Limit:     request.Limit,
+			Direction: logproto.BACKWARD,
+			Selector:  request.Query, // TODO: Validate it's a select query
+			Shards:    []string{},
+		},
+	}
+
+	tenantID, err := tenant.TenantID(r.Context())
+	if err != nil {
+		level.Warn(logger).Log("msg", "error getting tenant id", "err", err)
+		serverutil.WriteError(httpgrpc.Errorf(http.StatusBadRequest, err.Error()), w)
+		return
+	}
+
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		level.Error(logger).Log("msg", "Error in upgrading websocket", "err", err)
+		return
+	}
+	defer conn.Close()
+
+	level.Info(logger).Log("msg", "starting to read logs", "tenant", tenantID, "selectors", params.Selector)
+
+	defer func() {
+		level.Info(logger).Log("msg", "ended reading logs", "tenant", tenantID, "selectors", params.Selector)
+	}()
+
+	defer func() {
+		if err := conn.Close(); err != nil {
+			level.Error(logger).Log("msg", "Error closing websocket", "err", err)
+		}
+	}()
+
+	iter, err := q.querier.SelectLogs(r.Context(), params)
+	iterClosed := false // TODO
+	if err != nil {
+		if err := conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseInternalServerErr, err.Error())); err != nil {
+			level.Error(logger).Log("msg", "Error selecting logs", "err", err)
+		}
+		return 
+	}
+
+	ticker := time.NewTicker(wsPingPeriod)
+	defer ticker.Stop()
+
+	// Process client client closing connection.
+	doneChan := make(chan struct{}) // TODO: should use errgroup
+	go func() {
+		for {
+			_, _, err := conn.ReadMessage()
+			if err != nil {
+				if closeErr, ok := err.(*websocket.CloseError); ok {
+					if closeErr.Code == websocket.CloseNormalClosure {
+						break
+					}
+					level.Error(logger).Log("msg", "Error from client", "err", err)
+					break
+				} else if iterClosed {
+					return
+				} else {
+					level.Error(logger).Log("msg", "Unexpected error from client", "err", err)
+					break
+				}
+			}
+		}
+		doneChan <- struct{}{}
+	}()
+
+	// Process entries.
+	go sendReadBatches(r.Context(), iter, conn, doneChan)
+	<- doneChan
+}
+
+func isDone(ctx context.Context) bool {
+	select {
+	case <-ctx.Done():
+		return true
+	default:
+		return false
+	}
+}
+
+func sendReadBatches(ctx context.Context, i iter.EntryIterator, w marshal.WebsocketWriter, doneChan chan struct{}) error {
+	defer func() {
+		doneChan <- struct{}{}
+	}()
+	stats := stats.FromContext(ctx)
+
+	// send until there are no new entries.
+	for !isDone(ctx) {
+		fetchSize := uint32(queryBatchSize)
+		batch, batchSize, err := iter.ReadBatch(i, fetchSize)
+		if err != nil {
+			return err
+		}
+
+		if len(batch.Streams) == 0 {
+			return nil
+		}
+
+		stats.AddIngesterBatch(int64(batchSize))
+		batch.Stats = stats.Ingester()
+
+		if err := marshal.WriteReadResponseJSON(batch, w); err != nil {
+			return err
+		}
+		stats.Reset()
+	}
+	return nil
 }
 
 // TailHandler is a http.HandlerFunc for handling tail queries.

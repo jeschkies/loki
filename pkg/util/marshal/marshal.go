@@ -65,6 +65,19 @@ func WriteTailResponseJSON(r legacy.TailResponse, c WebsocketWriter) error {
 	return c.WriteMessage(websocket.TextMessage, data)
 }
 
+func WriteReadResponseJSON(r *logproto.QueryResponse, c WebsocketWriter) error {
+	adapter := &readResponseAdapter{Data: r.Streams}
+	data, err := jsoniter.Marshal(adapter)
+	if err != nil {
+		return err
+	}
+	return c.WriteMessage(websocket.TextMessage, data)
+}
+
+type readResponseAdapter struct {
+	Data []logproto.Stream `json:"data"`
+}
+
 // WriteSeriesResponseJSON marshals a logproto.SeriesResponse to v1 loghttp JSON and then
 // writes it to the provided io.Writer.
 func WriteSeriesResponseJSON(r logproto.SeriesResponse, w io.Writer) error {
