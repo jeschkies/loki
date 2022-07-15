@@ -303,6 +303,10 @@ func (t *Loki) initQuerier() (services.Service, error) {
 		t.Querier = q
 	}
 
+	if t.Cfg.Querier.Federation.IsDefined() {
+		t.Querier = querier.NewRemoteReadQuerier(t.Cfg.Querier.Federation)
+	}
+
 	querierWorkerServiceConfig := querier.WorkerServiceConfig{
 		AllEnabled:            t.Cfg.isModuleEnabled(All),
 		ReadEnabled:           t.Cfg.isModuleEnabled(Read),

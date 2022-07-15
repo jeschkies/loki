@@ -56,3 +56,18 @@ func ReadTailResponseJSON(r *loghttp.TailResponse, reader WebsocketReader) error
 	}
 	return jsoniter.Unmarshal(data, r)
 }
+
+func ReadRemoteResponseJSON(r *logproto.QueryResponse, data []byte) error {
+	adapter := &readResponseAdapter{}
+	err := jsoniter.Unmarshal(data, adapter)
+	if err != nil {
+		return err
+	}
+
+	r.Streams = adapter.Data
+	return nil
+}
+
+type readResponseAdapter struct {
+	Data []logproto.Stream `json:"data"`
+}

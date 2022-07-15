@@ -55,6 +55,7 @@ type Config struct {
 	QueryStoreOnly                bool             `yaml:"query_store_only"`
 	QueryIngesterOnly             bool             `yaml:"query_ingester_only"`
 	MultiTenantQueriesEnabled     bool             `yaml:"multi_tenant_queries_enabled"`
+	Federation                    RemoteReadConfig `yaml:"federation,omitempty"`
 }
 
 // RegisterFlags register flags.
