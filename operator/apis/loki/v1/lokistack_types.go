@@ -343,13 +343,6 @@ type ClusterProxy struct {
 	// +kubebuilder:validation:optional
 	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="NoProxy"
 	NoProxy string `json:"noProxy,omitempty"`
-	// ReadVarsFromEnv defines a flag to use Operator-lib provides a helper function
-	//
-	// +optional
-	// +kubebuilder:validation:optional
-	// +kubebuilder:default:=false
-	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors="urn:alm:descriptor:com.tectonic.ui:booleanSwitch",displayName="ReadVarsFromEnv"
-	ReadVarsFromEnv bool `json:"readVarsFromEnv,omitempty"`
 }
 
 // ObjectStorageTLSSpec is the TLS configuration for reaching the object storage endpoint.
@@ -360,7 +353,7 @@ type ObjectStorageTLSSpec struct {
 	// +optional
 	// +kubebuilder:validation:optional
 	// +kubebuilder:default:=service-ca.crt
-	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors="urn:alm:descriptor:io.kubernetes:ConfigMap",displayName="CA ConfigMap Key"
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="CA ConfigMap Key"
 	CAKey string `json:"caKey,omitempty"`
 	// CA is the name of a ConfigMap containing a CA certificate.
 	// It needs to be in the same namespace as the LokiStack custom resource.
@@ -698,18 +691,17 @@ type LokiStackSpec struct {
 	// Proxy defines the spec for the object proxy to configure cluster proxy information.
 	//
 	// +optional
-	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Optional
 	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Cluster Proxy"
-	Proxy *ClusterProxy `json:"proxy"`
+	Proxy *ClusterProxy `json:"proxy,omitempty"`
 
 	// ReplicationFactor defines the policy for log stream replication.
 	//
 	// +optional
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:validation:Minimum:=1
-	// +kubebuilder:default:=1
 	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors="urn:alm:descriptor:com.tectonic.ui:number",displayName="Replication Factor"
-	ReplicationFactor int32 `json:"replicationFactor"`
+	ReplicationFactor int32 `json:"replicationFactor,omitempty"`
 
 	// Rules defines the spec for the ruler component
 	//
