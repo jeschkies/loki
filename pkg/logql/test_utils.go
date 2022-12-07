@@ -232,7 +232,9 @@ func (m MockDownstreamer) Downstream(ctx context.Context, queries []DownstreamQu
 			return nil, err
 		}
 
-		results = append(results, res)
+		for res.Next() {
+			results = append(results, res.Current())
+		}
 	}
 	return results, nil
 }

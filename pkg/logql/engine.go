@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/grafana/loki/pkg/logqlmodel/metadata"
+	//"github.com/grafana/loki/pkg/logqlmodel/metadata"
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
@@ -180,6 +180,7 @@ type Iterator interface {
 	Next() bool
 	Error() error
 	Current() logqlmodel.Result
+	Close() error
 }
 
 type SingleItem struct {
@@ -200,6 +201,10 @@ func (i SingleItem) Current() logqlmodel.Result {
 
 func (i SingleItem) Error() error {
 	return i.err
+}
+
+func (i SingleItem) Close() error {
+	return nil
 }
 
 type query struct {
@@ -305,8 +310,7 @@ func (q *query) Eval(ctx context.Context) (Iterator, error) {
 			return nil, err
 		}
 
-		defer util.LogErrorWithContext(ctx, "closing iterator", iter.Close)
-		return newStreamsBatchIter(iter, q.params.Limit(), q.params.Direction(), q.params.Interval()), nil
+		return newStreamsBatchIter(ctx, q.logger, iter, q.params.Limit(), q.params.Direction(), q.params.Interval()), nil
 	default:
 		return nil, errors.New("Unexpected type (%T): cannot evaluate")
 	}
@@ -505,32 +509,43 @@ func readStreams(i iter.EntryIterator, size uint32, dir logproto.Direction, inte
 }
 
 type streamsBatchIter struct {
+	ctx     context.Context
 	i       iter.EntryIterator
 	current logqlmodel.Streams
 	err     error
+	logger  log.Logger
 }
 
 const batchSize = 10
 
-func (i streamsBatchIter) Next() bool {
+func (i *streamsBatchIter) Next() bool {
 	i.current, i.err = readStreams(i.i, batchSize, logproto.BACKWARD, 0)
-	return i.err != nil && len(i.current) != 0
+	next := i.err != nil && len(i.current) != 0
+	level.Debug(i.logger).Log("msg", "getting next streams batch", "next", next, "error", i.err, "current", i.current)
+	return next
 }
-func (i streamsBatchIter) Current() logqlmodel.Result {
+func (i *streamsBatchIter) Current() logqlmodel.Result {
 	return logqlmodel.Result{
 		Data: i.current,
 	}
 }
 
-func (i streamsBatchIter) Error() error {
+func (i *streamsBatchIter) Error() error {
 	return i.err
 }
 
-func newStreamsBatchIter(i iter.EntryIterator, size uint32, dir logproto.Direction, interval time.Duration) Iterator {
-	return streamsBatchIter{
+func (i *streamsBatchIter) Close() error {
+	util.LogErrorWithContext(i.ctx, "closing iterator", i.i.Close)
+	return nil
+}
+
+func newStreamsBatchIter(ctx context.Context, logger log.Logger, i iter.EntryIterator, size uint32, dir logproto.Direction, interval time.Duration) Iterator {
+	return &streamsBatchIter{
+		ctx: ctx,
 		i:       i,
 		current: nil,
 		err:     nil,
+		logger:  logger,
 	}
 }
 

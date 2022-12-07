@@ -152,11 +152,13 @@ func (ast *astMapperware) Do(ctx context.Context, r queryrangebase.Request) (que
 	}
 	query := ast.ng.Query(ctx, params, parsed)
 
-	res, err := query.Exec(ctx)
+	qres, err := query.Exec(ctx)
 	if err != nil {
 		return nil, err
 	}
 
+	qres.Next()
+	res := qres.Current()
 	value, err := marshal.NewResultValue(res.Data)
 	if err != nil {
 		return nil, err

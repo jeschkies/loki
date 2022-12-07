@@ -90,6 +90,11 @@ func (q *QuerierAPI) RangeQueryHandler(w http.ResponseWriter, r *http.Request) {
 	)
 	query := q.engine.Query(params)
 	results, err := query.Exec(ctx)
+	defer func() {
+		if results != nil {
+			results.Close()
+		}
+	}()
 
 	if err != nil {
 		serverutil.WriteError(err, w)
@@ -139,7 +144,8 @@ func (q *QuerierAPI) InstantQueryHandler(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	if err := marshal.WriteQueryResponseJSON(result, w); err != nil {
+	result.Next()
+	if err := marshal.WriteQueryResponseJSON(result.Current(), w); err != nil {
 		serverutil.WriteError(err, w)
 		return
 	}
@@ -188,15 +194,21 @@ func (q *QuerierAPI) LogQueryHandler(w http.ResponseWriter, r *http.Request) {
 	)
 	query := q.engine.Query(params)
 
-	result, err := query.Exec(ctx)
+	results, err := query.Exec(ctx)
 	if err != nil {
 		serverutil.WriteError(err, w)
 		return
 	}
 
-	if err := marshal_legacy.WriteQueryResponseJSON(result, w); err != nil {
-		serverutil.WriteError(err, w)
-		return
+	w.Header().Add("content-type", "text/event-stream")
+	for results.Next() {
+		result := results.Current()
+		w.Write([]byte("data: "))
+		if err := marshal.WriteQueryResponseJSON(result, w); err != nil {
+			serverutil.WriteError(err, w)
+			return
+		}
+		w.Write([]byte("\n\n"))
 	}
 }
 

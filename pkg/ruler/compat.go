@@ -78,10 +78,12 @@ func engineQueryFunc(engine *logql.Engine, overrides RulesLimits, checker readyC
 		)
 		q := engine.Query(params)
 
-		res, err := q.Exec(ctx)
+		qres, err := q.Exec(ctx)
 		if err != nil {
 			return nil, err
 		}
+		qres.Next()
+		res := qres.Current()
 		switch v := res.Data.(type) {
 		case promql.Vector:
 			return v, nil
