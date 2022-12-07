@@ -89,14 +89,22 @@ func (q *QuerierAPI) RangeQueryHandler(w http.ResponseWriter, r *http.Request) {
 		request.Shards,
 	)
 	query := q.engine.Query(params)
-	result, err := query.Exec(ctx)
+	results, err := query.Exec(ctx)
+
 	if err != nil {
 		serverutil.WriteError(err, w)
 		return
 	}
-	if err := marshal.WriteQueryResponseJSON(result, w); err != nil {
-		serverutil.WriteError(err, w)
-		return
+
+	w.Header().Add("content-type", "text/event-stream")
+	for results.Next() {
+		result := results.Current()
+		w.Write([]byte("data: "))
+		if err := marshal.WriteQueryResponseJSON(result, w); err != nil {
+			serverutil.WriteError(err, w)
+			return
+		}
+		w.Write([]byte("\n\n"))
 	}
 }
 

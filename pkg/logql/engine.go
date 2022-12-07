@@ -172,7 +172,34 @@ func (ng *Engine) Query(params Params) Query {
 // Query is a LogQL query to be executed.
 type Query interface {
 	// Exec processes the query.
-	Exec(ctx context.Context) (logqlmodel.Result, error)
+	Exec(ctx context.Context) (Iterator, error)
+}
+
+type Iterator interface {
+	// Returns true if there is more data to iterate and moves the iterator.
+	Next() bool
+	Error() error
+	Current() logqlmodel.Result
+}
+
+type SingleItem struct {
+	data logqlmodel.Result
+	once bool
+	err  error
+}
+
+func (i SingleItem) Next() bool {
+	oldOnce := i.once
+	i.once = true
+	return oldOnce
+}
+
+func (i SingleItem) Current() logqlmodel.Result {
+	return i.data
+}
+
+func (i SingleItem) Error() error {
+	return i.err
 }
 
 type query struct {
@@ -199,7 +226,7 @@ func (q *query) resultLength(res promql_parser.Value) int {
 }
 
 // Exec Implements `Query`. It handles instrumentation & defers to Eval.
-func (q *query) Exec(ctx context.Context) (logqlmodel.Result, error) {
+func (q *query) Exec(ctx context.Context) (Iterator, error) {
 	log, ctx := spanlogger.New(ctx, "query.Exec")
 	defer log.Finish()
 
@@ -216,39 +243,37 @@ func (q *query) Exec(ctx context.Context) (logqlmodel.Result, error) {
 	// records query statistics
 	start := time.Now()
 	statsCtx, ctx := stats.NewContext(ctx)
-	metadataCtx, ctx := metadata.NewContext(ctx)
+	//metadataCtx, ctx := metadata.NewContext(ctx)
 
-	data, err := q.Eval(ctx)
+	iter, err := q.Eval(ctx)
 
 	queueTime, _ := ctx.Value(httpreq.QueryQueueTimeHTTPHeader).(time.Duration)
 
-	statResult := statsCtx.Result(time.Since(start), queueTime, q.resultLength(data))
+	statResult := statsCtx.Result(time.Since(start), queueTime, 0)
 	statResult.Log(level.Debug(log))
 
-	status := "200"
-	if err != nil {
-		status = "500"
-		if errors.Is(err, logqlmodel.ErrParse) ||
-			errors.Is(err, logqlmodel.ErrPipeline) ||
-			errors.Is(err, logqlmodel.ErrLimit) ||
-			errors.Is(err, logqlmodel.ErrBlocked) ||
-			errors.Is(err, context.Canceled) {
-			status = "400"
-		}
-	}
+	/*
+			status := "200"
+			if err != nil {
+				status = "500"
+				if errors.Is(err, logqlmodel.ErrParse) ||
+					errors.Is(err, logqlmodel.ErrPipeline) ||
+					errors.Is(err, logqlmodel.ErrLimit) ||
+					errors.Is(err, logqlmodel.ErrBlocked) ||
+					errors.Is(err, context.Canceled) {
+					status = "400"
+				}
+			}
 
-	if q.record {
-		RecordRangeAndInstantQueryMetrics(ctx, q.logger, q.params, status, statResult, data)
-	}
+			if q.record {
+		        		RecordRangeAndInstantQueryMetrics(ctx, q.logger, q.params, status, statResult, data)
+			}
+	*/
 
-	return logqlmodel.Result{
-		Data:       data,
-		Statistics: statResult,
-		Headers:    metadataCtx.Headers(),
-	}, err
+	return iter, err
 }
 
-func (q *query) Eval(ctx context.Context) (promql_parser.Value, error) {
+func (q *query) Eval(ctx context.Context) (Iterator, error) {
 	tenants, _ := tenant.TenantIDs(ctx)
 	queryTimeout := validation.SmallestPositiveNonZeroDurationPerTenant(tenants, q.limits.QueryTimeout)
 
@@ -267,7 +292,12 @@ func (q *query) Eval(ctx context.Context) (promql_parser.Value, error) {
 	switch e := expr.(type) {
 	case syntax.SampleExpr:
 		value, err := q.evalSample(ctx, e)
-		return value, err
+		iter := SingleItem{
+			data: logqlmodel.Result{Data: value},
+			once: false,
+			err:  err,
+		}
+		return iter, err
 
 	case syntax.LogSelectorExpr:
 		iter, err := q.evaluator.Iterator(ctx, e, q.params)
@@ -276,8 +306,7 @@ func (q *query) Eval(ctx context.Context) (promql_parser.Value, error) {
 		}
 
 		defer util.LogErrorWithContext(ctx, "closing iterator", iter.Close)
-		streams, err := readStreams(iter, q.params.Limit(), q.params.Direction(), q.params.Interval())
-		return streams, err
+		return newStreamsBatchIter(iter, q.params.Limit(), q.params.Direction(), q.params.Interval()), nil
 	default:
 		return nil, errors.New("Unexpected type (%T): cannot evaluate")
 	}
@@ -473,6 +502,36 @@ func readStreams(i iter.EntryIterator, size uint32, dir logproto.Direction, inte
 	}
 	sort.Sort(result)
 	return result, i.Error()
+}
+
+type streamsBatchIter struct {
+	i       iter.EntryIterator
+	current logqlmodel.Streams
+	err     error
+}
+
+const batchSize = 10
+
+func (i streamsBatchIter) Next() bool {
+	i.current, i.err = readStreams(i.i, batchSize, logproto.BACKWARD, 0)
+	return i.err != nil && len(i.current) != 0
+}
+func (i streamsBatchIter) Current() logqlmodel.Result {
+	return logqlmodel.Result{
+		Data: i.current,
+	}
+}
+
+func (i streamsBatchIter) Error() error {
+	return i.err
+}
+
+func newStreamsBatchIter(i iter.EntryIterator, size uint32, dir logproto.Direction, interval time.Duration) Iterator {
+	return streamsBatchIter{
+		i:       i,
+		current: nil,
+		err:     nil,
+	}
 }
 
 type groupedAggregation struct {
