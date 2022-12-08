@@ -280,10 +280,10 @@ func (q *query) Exec(ctx context.Context) (Iterator, error) {
 
 func (q *query) Eval(ctx context.Context) (Iterator, error) {
 	tenants, _ := tenant.TenantIDs(ctx)
-	queryTimeout := validation.SmallestPositiveNonZeroDurationPerTenant(tenants, q.limits.QueryTimeout)
+	queryTimeout := 10 * time.Second//validation.SmallestPositiveNonZeroDurationPerTenant(tenants, q.limits.QueryTimeout)
 
-	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
-	defer cancel()
+	ctx, _ = context.WithTimeout(ctx, queryTimeout)
+	//defer cancel()
 
 	expr, err := q.parse(ctx, q.params.Query())
 	if err != nil {

@@ -233,7 +233,7 @@ services:
   grafana:
     logging:
       <<: *logging
-    image: grafana/grafana
+    image: grafana/grafana:dev
     depends_on:
       - querier
     environment:
