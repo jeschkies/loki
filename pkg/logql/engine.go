@@ -282,7 +282,7 @@ func (q *query) Eval(ctx context.Context) (Iterator, error) {
 	tenants, _ := tenant.TenantIDs(ctx)
 	queryTimeout := 10 * time.Second//validation.SmallestPositiveNonZeroDurationPerTenant(tenants, q.limits.QueryTimeout)
 
-	ctx, _ = context.WithTimeout(ctx, queryTimeout)
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	//defer cancel()
 
 	expr, err := q.parse(ctx, q.params.Query())
@@ -310,7 +310,7 @@ func (q *query) Eval(ctx context.Context) (Iterator, error) {
 			return nil, err
 		}
 
-		return newStreamsBatchIter(ctx, q.logger, iter, q.params.Limit(), q.params.Direction(), q.params.Interval()), nil
+		return newStreamsBatchIter(ctx, cancel, q.logger, iter, q.params.Limit(), q.params.Direction(), q.params.Interval()), nil
 	default:
 		return nil, errors.New("Unexpected type (%T): cannot evaluate")
 	}
@@ -510,6 +510,7 @@ func readStreams(i iter.EntryIterator, size uint32, dir logproto.Direction, inte
 
 type streamsBatchIter struct {
 	ctx     context.Context
+	cancel  context.CancelFunc
 	i       iter.EntryIterator
 	current logqlmodel.Streams
 	err     error
@@ -536,12 +537,14 @@ func (i *streamsBatchIter) Error() error {
 
 func (i *streamsBatchIter) Close() error {
 	util.LogErrorWithContext(i.ctx, "closing iterator", i.i.Close)
+	i.cancel()
 	return nil
 }
 
-func newStreamsBatchIter(ctx context.Context, logger log.Logger, i iter.EntryIterator, size uint32, dir logproto.Direction, interval time.Duration) Iterator {
+func newStreamsBatchIter(ctx context.Context, cancel context.CancelFunc, logger log.Logger, i iter.EntryIterator, size uint32, dir logproto.Direction, interval time.Duration) Iterator {
 	return &streamsBatchIter{
-		ctx: ctx,
+		ctx:     ctx,
+		cancel:  cancel,
 		i:       i,
 		current: nil,
 		err:     nil,
