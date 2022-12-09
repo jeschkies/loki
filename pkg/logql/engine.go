@@ -280,7 +280,7 @@ func (q *query) Exec(ctx context.Context) (Iterator, error) {
 
 func (q *query) Eval(ctx context.Context) (Iterator, error) {
 	tenants, _ := tenant.TenantIDs(ctx)
-	queryTimeout := 10 * time.Second//validation.SmallestPositiveNonZeroDurationPerTenant(tenants, q.limits.QueryTimeout)
+	queryTimeout := 10 * time.Second //validation.SmallestPositiveNonZeroDurationPerTenant(tenants, q.limits.QueryTimeout)
 
 	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	//defer cancel()
@@ -521,8 +521,8 @@ const batchSize = 10
 
 func (i *streamsBatchIter) Next() bool {
 	i.current, i.err = readStreams(i.i, batchSize, logproto.BACKWARD, 0)
-	next := i.err != nil && len(i.current) != 0
-	level.Debug(i.logger).Log("msg", "getting next streams batch", "next", next, "error", i.err, "current", i.current)
+	next := i.err == nil && len(i.current) != 0
+	level.Debug(i.logger).Log("msg", "getting next streams batch", "next", next, "error", i.err, "current", len(i.current))
 	return next
 }
 func (i *streamsBatchIter) Current() logqlmodel.Result {
