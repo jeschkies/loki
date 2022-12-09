@@ -88,9 +88,9 @@ limits_config:
     split_queries_by_interval: 15m
 querier:
     engine:
-        timeout: 5m
+        timeout: 5s
     query_ingesters_within: 2h
-    query_timeout: 5m
+    query_timeout: 5s
     multi_tenant_queries_enabled: false
 query_range:
     align_queries_with_step: true

@@ -521,6 +521,7 @@ const batchSize = 10
 
 func (i *streamsBatchIter) Next() bool {
 	i.current, i.err = readStreams(i.i, batchSize, logproto.BACKWARD, 0)
+	time.Sleep(time.Second)
 	next := i.err == nil && len(i.current) != 0
 	level.Debug(i.logger).Log("msg", "getting next streams batch", "next", next, "error", i.err, "current", len(i.current))
 	return next
