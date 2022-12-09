@@ -283,7 +283,10 @@ func (q *query) Eval(ctx context.Context) (Iterator, error) {
 	queryTimeout := 10 * time.Second //validation.SmallestPositiveNonZeroDurationPerTenant(tenants, q.limits.QueryTimeout)
 
 	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
-	//defer cancel()
+	go func() {
+		time.Sleep(10 * time.Second)
+		cancel()
+	}()
 
 	expr, err := q.parse(ctx, q.params.Query())
 	if err != nil {
@@ -517,11 +520,11 @@ type streamsBatchIter struct {
 	logger  log.Logger
 }
 
-const batchSize = 10
+const batchSize = 5
 
 func (i *streamsBatchIter) Next() bool {
 	i.current, i.err = readStreams(i.i, batchSize, logproto.BACKWARD, 0)
-	time.Sleep(time.Second)
+	time.Sleep(200 * time.Millisecond)
 	next := i.err == nil && len(i.current) != 0
 	level.Debug(i.logger).Log("msg", "getting next streams batch", "next", next, "error", i.err, "current", len(i.current))
 	return next
