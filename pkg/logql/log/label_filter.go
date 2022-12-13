@@ -157,7 +157,7 @@ func NewBytesLabelFilter(t LabelFilterType, name string, b uint64) *BytesLabelFi
 	}
 }
 
-func (d *BytesLabelFilter) Process(_ int64, line []byte, lbs *LabelsBuilder) ([]byte, bool) {
+func (d *BytesLabelFilter) Process(_ int64, line []byte, lbs *LabelsView) ([]byte, bool) {
 	if lbs.HasErr() {
 		// if there's an error only the string matchers can filter it out.
 		return line, true

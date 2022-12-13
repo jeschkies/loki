@@ -29,7 +29,7 @@ type StreamPipeline interface {
 // A Stage implementation should never mutate the line passed, but instead either
 // return the line unchanged or allocate a new line.
 type Stage interface {
-	Process(ts int64, line []byte, lbs *LabelsBuilder) ([]byte, bool)
+	Process(ts int64, line []byte, lbs LabelsView) ([]byte, LabelsView, bool)
 	RequiredLabelNames() []string
 }
 
@@ -155,9 +155,10 @@ func (p *pipeline) ForStream(labels labels.Labels) StreamPipeline {
 
 func (p *streamPipeline) Process(ts int64, line []byte) ([]byte, LabelsResult, bool) {
 	var ok bool
+	var labels labelsResult
 	p.builder.Reset()
 	for _, s := range p.stages {
-		line, ok = s.Process(ts, line, p.builder)
+		line, labels, ok = s.Process(ts, line, p.builder)
 		if !ok {
 			return nil, nil, false
 		}

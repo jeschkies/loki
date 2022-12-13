@@ -12,6 +12,11 @@ const MaxInternedStrings = 1024
 
 var EmptyLabelsResult = NewLabelsResult(labels.Labels{}, labels.Labels{}.Hash())
 
+type LabelsView interface {
+	Get(key string) (string, bool) 
+	Materialize() LabelsResult
+}
+
 // LabelsResult is a computed labels result that contains the labels set with associated string and hash.
 // The is mainly used for caching and returning labels computations out of pipelines and stages.
 type LabelsResult interface {

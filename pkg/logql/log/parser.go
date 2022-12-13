@@ -376,14 +376,14 @@ func NewJSONExpressionParser(expressions []JSONExpression) (*JSONExpressionParse
 	}, nil
 }
 
-func (j *JSONExpressionParser) Process(_ int64, line []byte, lbs *LabelsBuilder) ([]byte, bool) {
+func (j *JSONExpressionParser) Process(_ int64, line []byte, lbs *LabelsBuilder) ([]byte, LabelsResult, bool) {
 	if lbs.ParserLabelHints().NoLabels() {
-		return line, true
+		return line, nil, true
 	}
 
 	if !jsoniter.ConfigFastest.Valid(line) {
 		lbs.SetErr(errJSON)
-		return line, true
+		return line, nil, true
 	}
 
 	for identifier, paths := range j.expressions {
