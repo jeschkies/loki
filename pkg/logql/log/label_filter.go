@@ -85,16 +85,16 @@ func NewOrLabelFilter(left LabelFilterer, right LabelFilterer) *BinaryLabelFilte
 	}
 }
 
-func (b *BinaryLabelFilter) Process(ts int64, line []byte, lbs *LabelsBuilder) ([]byte, bool) {
-	line, lok := b.Left.Process(ts, line, lbs)
+func (b *BinaryLabelFilter) Process(ts int64, line []byte, lbs LabelsView) ([]byte, LabelsView, bool) {
+	line, _, lok := b.Left.Process(ts, line, lbs)
 	if !b.and && lok {
-		return line, true
+		return line, lbs, true
 	}
-	line, rok := b.Right.Process(ts, line, lbs)
+	line, _, rok := b.Right.Process(ts, line, lbs)
 	if !b.and {
-		return line, lok || rok
+		return line, lbs, lok || rok
 	}
-	return line, lok && rok
+	return line, lbs, lok && rok
 }
 
 func (b *BinaryLabelFilter) RequiredLabelNames() []string {
@@ -121,8 +121,8 @@ func (b *BinaryLabelFilter) String() string {
 type noopLabelFilter struct{}
 
 func (noopLabelFilter) String() string { return "" }
-func (noopLabelFilter) Process(_ int64, line []byte, _ *LabelsBuilder) ([]byte, bool) {
-	return line, true
+func (noopLabelFilter) Process(_ int64, line []byte, lbs LabelsView) ([]byte, LabelsView, bool) {
+	return line, lbs, true
 }
 func (noopLabelFilter) RequiredLabelNames() []string { return []string{} }
 
@@ -157,7 +157,7 @@ func NewBytesLabelFilter(t LabelFilterType, name string, b uint64) *BytesLabelFi
 	}
 }
 
-func (d *BytesLabelFilter) Process(_ int64, line []byte, lbs *LabelsView) ([]byte, bool) {
+func (d *BytesLabelFilter) Process(_ int64, line []byte, lbs LabelsView) ([]byte, bool) {
 	if lbs.HasErr() {
 		// if there's an error only the string matchers can filter it out.
 		return line, true
