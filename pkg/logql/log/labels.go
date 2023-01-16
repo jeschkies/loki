@@ -170,6 +170,16 @@ func (b *LabelsBuilder) SetErrorDetails(desc string) *LabelsBuilder {
 	return b
 }
 
+func (b *LabelsBuilder) ResetError() *LabelsBuilder {
+	b.err = ""
+	return b
+}
+
+func (b *LabelsBuilder) ResetErrorDetails() *LabelsBuilder {
+	b.errDetails = ""
+	return b
+}
+
 func (b *LabelsBuilder) GetErrorDetails() string {
 	return b.errDetails
 }
