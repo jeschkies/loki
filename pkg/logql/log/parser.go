@@ -54,21 +54,25 @@ func NewJSONParser() *JSONParser {
 	}
 }
 
-func (j *JSONParser) Process(_ int64, line []byte, lbs *LabelsBuilder) ([]byte, bool) {
-	if lbs.ParserLabelHints().NoLabels() {
-		return line, true
+func (j *JSONParser) Process(_ int64, line []byte, lbs LabelsView) ([]byte, LabelsView, bool) {
+
+	// TODO: nest labels views here
+	b := lbs.Materialize()
+
+	if b.ParserLabelHints().NoLabels() {
+		return line, lbs, true
 	}
 
 	// reset the state.
 	j.prefixBuffer = j.prefixBuffer[:0]
-	j.lbs = lbs
+	j.lbs = b
 
 	if err := jsonparser.ObjectEach(line, j.parseObject); err != nil {
-		lbs.SetErr(errJSON)
-		lbs.SetErrorDetails(err.Error())
-		return line, true
+		b.SetErr(errJSON)
+		b.SetErrorDetails(err.Error())
+		return line, b, true
 	}
-	return line, true
+	return line, b, true
 }
 
 func (j *JSONParser) parseObject(key, value []byte, dataType jsonparser.ValueType, offset int) error {

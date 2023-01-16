@@ -13,7 +13,8 @@ const MaxInternedStrings = 1024
 var EmptyLabelsResult = NewLabelsResult(labels.Labels{}, labels.Labels{}.Hash())
 
 type LabelsView interface {
-	Get(key string) (string, bool) 
+	Get(key string) (string, bool)
+	Materialize() *LabelsBuilder
 }
 
 // LabelsResult is a computed labels result that contains the labels set with associated string and hash.
@@ -141,6 +142,10 @@ func (b *LabelsBuilder) Reset() {
 	b.add = b.add[:0]
 	b.err = ""
 	b.errDetails = ""
+}
+
+func (b *LabelsBuilder) Materialize() *LabelsBuilder {
+	return b
 }
 
 // ParserLabelHints returns a limited list of expected labels to extract for metric queries.

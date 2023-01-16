@@ -155,17 +155,19 @@ func NewFormatter(tmpl string) (*LineFormatter, error) {
 	return lf, nil
 }
 
-func (lf *LineFormatter) Process(ts int64, line []byte, lbs *LabelsBuilder) ([]byte, bool) {
+func (lf *LineFormatter) Process(ts int64, line []byte, lbs LabelsView) ([]byte, LabelsView, bool) {
 	lf.buf.Reset()
 	lf.currentLine = line
 	lf.currentTs = ts
 
-	if err := lf.Template.Execute(lf.buf, lbs.Map()); err != nil {
-		lbs.SetErr(errTemplateFormat)
-		lbs.SetErrorDetails(err.Error())
-		return line, true
+	b := lbs.Materialize()
+
+	if err := lf.Template.Execute(lf.buf, b.Map()); err != nil {
+		b.SetErr(errTemplateFormat)
+		b.SetErrorDetails(err.Error())
+		return line, b, true
 	}
-	return lf.buf.Bytes(), true
+	return lf.buf.Bytes(), b, true
 }
 
 func (lf *LineFormatter) RequiredLabelNames() []string {
@@ -315,32 +317,35 @@ func validate(fmts []LabelFmt) error {
 	return nil
 }
 
-func (lf *LabelsFormatter) Process(ts int64, l []byte, lbs *LabelsBuilder) ([]byte, bool) {
+func (lf *LabelsFormatter) Process(ts int64, l []byte, lbs LabelsView) ([]byte, LabelsView, bool) {
 	lf.currentLine = l
 	lf.currentTs = ts
+
+	// TODO: Maybe a view needs set as well
+	b := lbs.Materialize()
 
 	var data interface{}
 	for _, f := range lf.formats {
 		if f.Rename {
 			v, ok := lbs.Get(f.Value)
 			if ok {
-				lbs.Set(f.Name, v)
-				lbs.Del(f.Value)
+				b.Set(f.Name, v)
+				b.Del(f.Value)
 			}
 			continue
 		}
 		lf.buf.Reset()
 		if data == nil {
-			data = lbs.Map()
+			data = b.Map()
 		}
 		if err := f.tmpl.Execute(lf.buf, data); err != nil {
-			lbs.SetErr(errTemplateFormat)
-			lbs.SetErrorDetails(err.Error())
+			b.SetErr(errTemplateFormat)
+			b.SetErrorDetails(err.Error())
 			continue
 		}
-		lbs.Set(f.Name, lf.buf.String())
+		b.Set(f.Name, lf.buf.String())
 	}
-	return l, true
+	return l, b, true
 }
 
 func (lf *LabelsFormatter) RequiredLabelNames() []string {
