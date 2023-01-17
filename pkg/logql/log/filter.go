@@ -43,8 +43,8 @@ func (n notFilter) Filter(line []byte) bool {
 
 func (n notFilter) ToStage() Stage {
 	return StageFunc{
-		process: func(_ int64, line []byte, _ *LabelsBuilder) ([]byte, bool) {
-			return line, n.Filter(line)
+		process: func(_ int64, line []byte, lbs LabelsView) ([]byte, LabelsView, bool) {
+			return line, lbs, n.Filter(line)
 		},
 	}
 }

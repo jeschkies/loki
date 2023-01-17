@@ -224,7 +224,9 @@ func NewRegexpParser(re string) (*RegexpParser, error) {
 	}, nil
 }
 
-func (r *RegexpParser) Process(_ int64, line []byte, lbs *LabelsBuilder) ([]byte, bool) {
+func (r *RegexpParser) Process(_ int64, line []byte, lbs LabelsView) ([]byte, LabelsView, bool) {
+	b := lbs.Materialize()
+
 	for i, value := range r.regex.FindSubmatch(line) {
 		if name, ok := r.nameIndex[i]; ok {
 			key, ok := r.keys.Get(unsafeGetBytes(name), func() (string, bool) {
@@ -232,7 +234,7 @@ func (r *RegexpParser) Process(_ int64, line []byte, lbs *LabelsBuilder) ([]byte
 				if len(sanitize) == 0 {
 					return "", false
 				}
-				if lbs.BaseHas(sanitize) {
+				if b.BaseHas(sanitize) {
 					sanitize = fmt.Sprintf("%s%s", sanitize, duplicateSuffix)
 				}
 				return sanitize, true
@@ -240,10 +242,10 @@ func (r *RegexpParser) Process(_ int64, line []byte, lbs *LabelsBuilder) ([]byte
 			if !ok {
 				continue
 			}
-			lbs.Set(key, string(value))
+			b.Set(key, string(value))
 		}
 	}
-	return line, true
+	return line, b, true
 }
 
 func (r *RegexpParser) RequiredLabelNames() []string { return []string{} }
@@ -262,21 +264,23 @@ func NewLogfmtParser() *LogfmtParser {
 	}
 }
 
-func (l *LogfmtParser) Process(_ int64, line []byte, lbs *LabelsBuilder) ([]byte, bool) {
-	if lbs.ParserLabelHints().NoLabels() {
-		return line, true
+func (l *LogfmtParser) Process(_ int64, line []byte, lbs LabelsView) ([]byte, LabelsView, bool) {
+	b := lbs.Materialize()
+
+	if b.ParserLabelHints().NoLabels() {
+		return line, b, true
 	}
 	l.dec.Reset(line)
 	for l.dec.ScanKeyval() {
 		key, ok := l.keys.Get(l.dec.Key(), func() (string, bool) {
 			sanitized := sanitizeLabelKey(string(l.dec.Key()), true)
-			if !lbs.ParserLabelHints().ShouldExtract(sanitized) {
+			if !b.ParserLabelHints().ShouldExtract(sanitized) {
 				return "", false
 			}
 			if len(sanitized) == 0 {
 				return "", false
 			}
-			if lbs.BaseHas(sanitized) {
+			if b.BaseHas(sanitized) {
 				sanitized = fmt.Sprintf("%s%s", sanitized, duplicateSuffix)
 			}
 			return sanitized, true
@@ -289,14 +293,14 @@ func (l *LogfmtParser) Process(_ int64, line []byte, lbs *LabelsBuilder) ([]byte
 		if bytes.ContainsRune(val, utf8.RuneError) {
 			val = nil
 		}
-		lbs.Set(key, string(val))
+		b.Set(key, string(val))
 	}
 	if l.dec.Err() != nil {
-		lbs.SetErr(errLogfmt)
-		lbs.SetErrorDetails(l.dec.Err().Error())
-		return line, true
+		b.SetErr(errLogfmt)
+		b.SetErrorDetails(l.dec.Err().Error())
+		return line, b, true
 	}
-	return line, true
+	return line, b, true
 }
 
 func (l *LogfmtParser) RequiredLabelNames() []string { return []string{} }

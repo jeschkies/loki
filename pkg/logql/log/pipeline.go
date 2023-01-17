@@ -76,17 +76,17 @@ func (n *noopPipeline) ForStream(labels labels.Labels) StreamPipeline {
 
 type noopStage struct{}
 
-func (noopStage) Process(_ int64, line []byte, lbls *LabelsBuilder) ([]byte, LabelsView, bool) {
+func (noopStage) Process(_ int64, line []byte, lbls LabelsView) ([]byte, LabelsView, bool) {
 	return line, lbls, true
 }
 func (noopStage) RequiredLabelNames() []string { return []string{} }
 
 type StageFunc struct {
-	process        func(ts int64, line []byte, lbs *LabelsBuilder) ([]byte, bool)
+	process        func(ts int64, line []byte, lbs LabelsView) ([]byte, LabelsView, bool)
 	requiredLabels []string
 }
 
-func (fn StageFunc) Process(ts int64, line []byte, lbs *LabelsBuilder) ([]byte, bool) {
+func (fn StageFunc) Process(ts int64, line []byte, lbs LabelsView) ([]byte, LabelsView, bool) {
 	return fn.process(ts, line, lbs)
 }
 
