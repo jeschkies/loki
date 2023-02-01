@@ -86,11 +86,11 @@ func (l *streamLineSampleExtractor) Process(ts int64, line []byte) (float64, Lab
 		return l.LineExtractor(line), l.builder.GroupedLabels(), true
 	}
 	l.builder.Reset()
-	line, ok := l.Stage.Process(ts, line, l.builder)
+	line, lbs, ok := l.Stage.Process(ts, line, l.builder)
 	if !ok {
 		return 0, nil, false
 	}
-	return l.LineExtractor(line), l.builder.GroupedLabels(), true
+	return l.LineExtractor(line), lbs.Materialize().GroupedLabels(), true
 }
 
 func (l *streamLineSampleExtractor) ProcessString(ts int64, line string) (float64, LabelsResult, bool) {
@@ -171,7 +171,7 @@ func (l *labelSampleExtractor) ForStream(labels labels.Labels) StreamSampleExtra
 func (l *streamLabelSampleExtractor) Process(ts int64, line []byte) (float64, LabelsResult, bool) {
 	// Apply the pipeline first.
 	l.builder.Reset()
-	line, ok := l.preStage.Process(ts, line, l.builder)
+	line, _, ok := l.preStage.Process(ts, line, l.builder)
 	if !ok {
 		return 0, nil, false
 	}
@@ -192,7 +192,7 @@ func (l *streamLabelSampleExtractor) Process(ts int64, line []byte) (float64, La
 	}
 
 	// post filters
-	if _, ok = l.postFilter.Process(ts, line, l.builder); !ok {
+	if _, _, ok = l.postFilter.Process(ts, line, l.builder); !ok {
 		return 0, nil, false
 	}
 	return v, l.builder.GroupedLabels(), true

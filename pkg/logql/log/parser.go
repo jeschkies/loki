@@ -376,7 +376,7 @@ func NewJSONExpressionParser(expressions []JSONExpression) (*JSONExpressionParse
 	}, nil
 }
 
-func (j *JSONExpressionParser) Process(_ int64, line []byte, lbs *LabelsBuilder) ([]byte, LabelsResult, bool) {
+func (j *JSONExpressionParser) Process(_ int64, line []byte, lbs *LabelsBuilder) ([]byte, LabelsView, bool) {
 	if lbs.ParserLabelHints().NoLabels() {
 		return line, nil, true
 	}
@@ -398,7 +398,7 @@ func (j *JSONExpressionParser) Process(_ int64, line []byte, lbs *LabelsBuilder)
 		lbs.Set(key, result)
 	}
 
-	return line, true
+	return line, lbs, true
 }
 
 func (j *JSONExpressionParser) RequiredLabelNames() []string { return []string{} }
