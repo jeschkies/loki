@@ -19,6 +19,7 @@ const (
 	StageTypeLogfmt       = "logfmt"
 	StageTypeRegex        = "regex"
 	StageTypeReplace      = "replace"
+	StageTypeRosie        = "rosie"
 	StageTypeMetric       = "metrics"
 	StageTypeLabel        = "labels"
 	StageTypeLabelDrop    = "labeldrop"
@@ -132,6 +133,11 @@ func New(logger log.Logger, jobName *string, stageType string,
 		}
 	case StageTypeRegex:
 		s, err = newRegexStage(logger, cfg)
+		if err != nil {
+			return nil, err
+		}
+	case StageTypeRosie:
+		s, err = newRosieStage(logger, cfg)
 		if err != nil {
 			return nil, err
 		}
