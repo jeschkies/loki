@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
+
 	util_log "github.com/grafana/loki/pkg/util/log"
 
 	"github.com/stretchr/testify/assert"
@@ -13,8 +14,7 @@ import (
 var testRosieYamlSingleStageWithoutSource = `
 pipeline_stages:
 - rosie:
-    expression: |
-        net.ip
+    expression: "net.ip \"-\" word.any"
 `
 
 func TestPipeline_Rosie(t *testing.T) {
@@ -24,11 +24,11 @@ func TestPipeline_Rosie(t *testing.T) {
 		entry           string
 		expectedExtract map[string]interface{}
 	}{
-		"successfully run a pipeline with 1 regex stage without source": {
+		"successfully run a pipeline with 1 rosie stage without source": {
 			testRosieYamlSingleStageWithoutSource,
 			testRegexLogLine,
 			map[string]interface{}{
-				"ip":        "11.11.11.11",
+				"ip": "11.11.11.11",
 			},
 		},
 	}

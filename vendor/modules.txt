@@ -850,6 +850,9 @@ github.com/jcmturner/gokrb5/v8/types
 ## explicit; go 1.13
 github.com/jcmturner/rpc/v2/mstypes
 github.com/jcmturner/rpc/v2/ndr
+# github.com/jeschkies/rosie-go v0.0.0-20211004160726-87e85bc1eda9
+## explicit; go 1.16
+github.com/jeschkies/rosie-go/pkg
 # github.com/jmespath/go-jmespath v0.4.0
 ## explicit; go 1.14
 github.com/jmespath/go-jmespath

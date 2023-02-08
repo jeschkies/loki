@@ -1,24 +1,25 @@
 package stages
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
+	rosie "github.com/jeschkies/rosie-go/pkg"
 	"github.com/mitchellh/mapstructure"
 	"github.com/prometheus/common/model"
-	rosie "github.com/jeschkies/rosie-go/pkg"
 )
 
 type RosieConfig struct {
-	Expression string  `mapstructure:"expression"`
+	Expression string `mapstructure:"expression"`
 }
 
 type rosieStage struct {
-	cfg        *RosieConfig
-	engine     *rosie.Engine
-	pattern    *rosie.Pattern
-	logger     log.Logger
+	cfg     *RosieConfig
+	engine  *rosie.Engine
+	pattern *rosie.Pattern
+	logger  log.Logger
 }
 
 func newRosieStage(logger log.Logger, config interface{}) (Stage, error) {
@@ -28,6 +29,8 @@ func newRosieStage(logger log.Logger, config interface{}) (Stage, error) {
 	}
 
 	engine, err := rosie.New("rosie")
+	engine.ImportPkg("net")
+	engine.ImportPkg("word")
 	if err != nil {
 		return nil, err
 	}
@@ -38,10 +41,14 @@ func newRosieStage(logger log.Logger, config interface{}) (Stage, error) {
 		logger: log.With(logger, "component", "stage", "type", "rosie"),
 	}
 
-	pat, _, err := engine.Compile(cfg.Expression)
+	pat, messages, err := engine.Compile(cfg.Expression)
+	for _, msg := range messages {
+		level.Info(stage.logger).Log("msg", fmt.Sprintf("%v", msg))
+	}
 	if err != nil {
 		return nil, err
 	}
+	stage.pattern = pat
 	return toStage(stage), nil
 }
 
@@ -58,7 +65,7 @@ func parseRosieConfig(config interface{}) (*RosieConfig, error) {
 func (r *rosieStage) Process(labels model.LabelSet, extracted map[string]interface{}, t *time.Time, entry *string) {
 	input := entry
 
-	match := r.pattern.MatchString(*input)
+	match, _ := r.pattern.MatchString(*input)
 	if match == nil {
 		if Debug {
 			level.Debug(r.logger).Log("msg", "rosie did not match", "input", *input)
@@ -67,7 +74,7 @@ func (r *rosieStage) Process(labels model.LabelSet, extracted map[string]interfa
 	}
 
 	for name, m := range match.Data {
-		extracted[name] = string(m)
+		extracted[name] = fmt.Sprintf("%v", m)
 	}
 }
 
