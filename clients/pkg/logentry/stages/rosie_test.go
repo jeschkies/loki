@@ -25,18 +25,12 @@ pipeline_stages:
         path      = net.path
         protocol  = net.http_version
         status    = [:digit:]{3}
-        size      = [:digit:]{3}
+        size      = num.uint
         referer   = "-"
-        useragent = "\""{[:alnum:] / [:space:] / [:punct:]}*"\""
+        useragent = [^"]+
     expression: >-
-        ip identd user "["timestamp"]" "\""action path protocol"\"" status size
+        ip identd user "["timestamp"]" "\""action path protocol"\"" status size "\""referer"\"" "\""useragent"\""
 `
-
-// `11.11.11.11 - frank [25/Jan/2000:14:00:01 -0500] "GET /1986.js HTTP/1.1" 200 932 "-" "Mozilla/5.0 (Windows; U; Windows NT 5.1; de; rv:1.9.1.7) Gecko/20091221 Firefox/3.5.7 GTB6"`
-
-//"\"" [:digit:]+ [:digit:]
-
-//expression: " (?P<status>\\d{3}|-) (?P<size>\\d+|-)\\s?\"?(?P<referer>[^\"]*)\"?\\s?\"?(?P<useragent>[^\"]*)?\"?$"
 
 func TestPipeline_Rosie(t *testing.T) {
 
