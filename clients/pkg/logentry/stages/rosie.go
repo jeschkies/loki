@@ -22,6 +22,15 @@ type rosieStage struct {
 	logger  log.Logger
 }
 
+type MatchData struct {
+	Subs []Sub
+}
+
+type Sub struct {
+	Data string
+	Type string
+}
+
 func newRosieStage(logger log.Logger, config interface{}) (Stage, error) {
 	cfg, err := parseRosieConfig(config)
 	if err != nil {
@@ -29,8 +38,14 @@ func newRosieStage(logger log.Logger, config interface{}) (Stage, error) {
 	}
 
 	engine, err := rosie.New("rosie")
-	engine.ImportPkg("net")
-	engine.ImportPkg("word")
+	if err != nil {
+		return nil, err
+	}
+	_, _, _, err = engine.ImportPkg("net")
+	if err != nil {
+		return nil, err
+	}
+	_, _, _, err = engine.ImportPkg("word")
 	if err != nil {
 		return nil, err
 	}
@@ -73,8 +88,10 @@ func (r *rosieStage) Process(labels model.LabelSet, extracted map[string]interfa
 		return
 	}
 
-	for name, m := range match.Data {
-		extracted[name] = fmt.Sprintf("%v", m)
+	matches := &MatchData{}
+	mapstructure.Decode(match.Data, matches)
+	for _, sub := range matches.Subs {
+		extracted[sub.Type] = sub.Data
 	}
 }
 
