@@ -15,21 +15,28 @@ var testRosieYamlSingleStageWithoutSource = `
 pipeline_stages:
 - rosie:
     prelude: |
-        import date, net, time, word
+        import date, net, num, time, word
 
-        ip         = net.ip
-        user       = word.any
-        identd     = "-"
-        timestamp  = date.day"/"date.month_name"/"date.year":"time.rfc2822 time.rfc2822_zone
+        ip        = net.ip
+        user      = word.any
+        identd    = "-"
+        timestamp = date.day"/"date.month_name"/"date.year":"time.rfc2822 time.rfc2822_zone
+        action    = net.http_command_name
+        path      = net.path
+        protocol  = net.http_version
+        status    = [:digit:]{3}
+        size      = [:digit:]{3}
+        referer   = "-"
+        useragent = "\""{[:alnum:] / [:space:] / [:punct:]}*"\""
     expression: >-
-        ip identd user "["timestamp"]"
+        ip identd user "["timestamp"]" "\""action path protocol"\"" status size
 `
 
 // `11.11.11.11 - frank [25/Jan/2000:14:00:01 -0500] "GET /1986.js HTTP/1.1" 200 932 "-" "Mozilla/5.0 (Windows; U; Windows NT 5.1; de; rv:1.9.1.7) Gecko/20091221 Firefox/3.5.7 GTB6"`
 
-//"net.http_command_name net.path net.http_version"\"" [:digit:]+ [:digit:]
+//"\"" [:digit:]+ [:digit:]
 
-//expression: "^\\[(?P<timestamp>[\\w:/]+\\s[+\\-]\\d{4})\\] \"(?P<action>\\S+)\\s?(?P<path>\\S+)?\\s?(?P<protocol>\\S+)?\" (?P<status>\\d{3}|-) (?P<size>\\d+|-)\\s?\"?(?P<referer>[^\"]*)\"?\\s?\"?(?P<useragent>[^\"]*)?\"?$"
+//expression: " (?P<status>\\d{3}|-) (?P<size>\\d+|-)\\s?\"?(?P<referer>[^\"]*)\"?\\s?\"?(?P<useragent>[^\"]*)?\"?$"
 
 func TestPipeline_Rosie(t *testing.T) {
 
