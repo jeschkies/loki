@@ -28,7 +28,7 @@ func TestPipeline_Rosie(t *testing.T) {
 			testRosieYamlSingleStageWithoutSource,
 			testRegexLogLine,
 			map[string]interface{}{
-				"ip": "11.11.11.11",
+				"net.ip": "11.11.11.11",
 			},
 		},
 	}
