@@ -12,6 +12,7 @@ import (
 )
 
 type RosieConfig struct {
+	Prelude    string `mapstructure:"prelude"`
 	Expression string `mapstructure:"expression"`
 }
 
@@ -23,12 +24,12 @@ type rosieStage struct {
 }
 
 type MatchData struct {
-	Subs []Sub
+	Subs []Sub `mapstructure:"subs"`
 }
 
 type Sub struct {
-	Data string
-	Type string
+	Value string `mapstructure:"data"`
+	Name  string `mapstructure:"type"`
 }
 
 func newRosieStage(logger log.Logger, config interface{}) (Stage, error) {
@@ -41,13 +42,12 @@ func newRosieStage(logger log.Logger, config interface{}) (Stage, error) {
 	if err != nil {
 		return nil, err
 	}
-	_, _, _, err = engine.ImportPkg("net")
-	if err != nil {
-		return nil, err
-	}
-	_, _, _, err = engine.ImportPkg("word")
-	if err != nil {
-		return nil, err
+
+	if cfg.Prelude != "" {
+		_, _, _, err = engine.LoadString(cfg.Prelude)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	stage := &rosieStage{
@@ -91,7 +91,7 @@ func (r *rosieStage) Process(labels model.LabelSet, extracted map[string]interfa
 	matches := &MatchData{}
 	mapstructure.Decode(match.Data, matches)
 	for _, sub := range matches.Subs {
-		extracted[sub.Type] = sub.Data
+		extracted[sub.Name] = sub.Value
 	}
 }
 
