@@ -2,7 +2,10 @@ package log
 
 import (
 	"sort"
+	"strings"
+	"unicode/utf8"
 
+	"github.com/buger/jsonparser"
 	"github.com/prometheus/prometheus/model/labels"
 
 	"github.com/grafana/loki/pkg/logqlmodel"
@@ -64,8 +67,9 @@ func (h *hasher) Hash(lbs labels.Labels) uint64 {
 // BaseLabelsBuilder is a label builder used by pipeline and stages.
 // Only one base builder is used and it contains cache for each LabelsBuilders.
 type BaseLabelsBuilder struct {
-	del []string
-	add []labels.Label
+	del     []string
+	add     []labels.Label
+	addJSON []labels.Label
 	// nolint:structcheck
 	// https://github.com/golangci/golangci-lint/issues/826
 	err string
@@ -286,8 +290,31 @@ Outer:
 		}
 		buf = append(buf, l)
 	}
+	// Unsecape JSON
+	for i, l := range b.add {
+		if strings.HasPrefix(l.Name, "_json") {
+			b.add[i].Value = unescapeJSONString2(unsafeGetBytes(l.Value))
+			b.add[i].Name = l.Name[5:]
+		}
+	}
 	buf = append(buf, b.add...)
 	return b.appendErrors(buf)
+}
+
+func unescapeJSONString2(b []byte) string {
+	var stackbuf [unescapeStackBufSize]byte // stack-allocated array for allocation-free unescaping of small strings
+	bU, err := jsonparser.Unescape(b, stackbuf[:])
+	if err != nil {
+		return ""
+	}
+	res := string(bU)
+	// rune error is rejected by Prometheus
+	for _, r := range res {
+		if r == utf8.RuneError {
+			return ""
+		}
+	}
+	return res
 }
 
 func (b *LabelsBuilder) Map() map[string]string {

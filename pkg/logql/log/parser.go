@@ -116,7 +116,7 @@ func (j *JSONParser) parseLabelValue(key, value []byte, dataType jsonparser.Valu
 		if !ok {
 			return
 		}
-		j.lbs.Set(key, readValue(value, dataType))
+		j.lbs.Set("_json"+key, readValue(value, dataType))
 		return
 
 	}
@@ -141,7 +141,7 @@ func (j *JSONParser) parseLabelValue(key, value []byte, dataType jsonparser.Valu
 	if !ok {
 		return
 	}
-	j.lbs.Set(keyString, readValue(value, dataType))
+	j.lbs.Set("_json"+keyString, readValue(value, dataType))
 }
 
 func (j *JSONParser) RequiredLabelNames() []string { return []string{} }
@@ -165,19 +165,22 @@ func readValue(v []byte, dataType jsonparser.ValueType) string {
 }
 
 func unescapeJSONString(b []byte) string {
-	var stackbuf [unescapeStackBufSize]byte // stack-allocated array for allocation-free unescaping of small strings
-	bU, err := jsonparser.Unescape(b, stackbuf[:])
-	if err != nil {
-		return ""
-	}
-	res := string(bU)
-	// rune error is rejected by Prometheus
-	for _, r := range res {
-		if r == utf8.RuneError {
+	return unsafeGetString(b)
+	/*
+		var stackbuf [unescapeStackBufSize]byte // stack-allocated array for allocation-free unescaping of small strings
+		bU, err := jsonparser.Unescape(b, stackbuf[:])
+		if err != nil {
 			return ""
 		}
-	}
-	return res
+		res := string(bU)
+		// rune error is rejected by Prometheus
+		for _, r := range res {
+			if r == utf8.RuneError {
+				return ""
+			}
+		}
+		return res
+	*/
 }
 
 type RegexpParser struct {
