@@ -1,7 +1,6 @@
 package log
 
 import (
-	"fmt"
 	"sort"
 	"strings"
 	"unicode/utf8"
@@ -306,7 +305,6 @@ Outer:
 		buf = append(buf, l)
 	}
 	// Unsecape JSON
-	fmt.Println("escaping add")
 	for i, l := range b.add {
 		if strings.HasPrefix(l.Name, "_json") {
 			bU := unsafeGetBytes(l.Value)
@@ -319,12 +317,12 @@ Outer:
 }
 
 func unescapeJSONString2(b []byte) string {
-	stackbuf := make([]byte, 0, len(b))
-	bU, err := jsonparser.Unescape(b, stackbuf)
+	var stackbuf [unescapeStackBufSize]byte
+	bU, err := jsonparser.Unescape(b, stackbuf[:])
 	if err != nil {
 		return ""
 	}
-	res := unsafeGetString(bU)
+	res := string(bU) //unsafeGetString(bU)
 	// rune error is rejected by Prometheus
 	for _, r := range res {
 		if r == utf8.RuneError {
