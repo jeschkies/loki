@@ -474,6 +474,10 @@ Outer:
 OuterAdd:
 	for _, la := range b.add {
 		for _, lg := range b.groups {
+			if strings.HasPrefix(la.Name, "_json") {
+				la.Value = unescapeJSONString2(unsafeGetBytes(la.Value))
+				la.Name = la.Name[5:]
+			}
 			if la.Name == lg {
 				continue OuterAdd
 			}
