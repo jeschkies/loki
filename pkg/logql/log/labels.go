@@ -196,11 +196,14 @@ func (b *LabelsBuilder) BaseHas(key string) bool {
 
 // Get returns the value of a labels key if it exists.
 func (b *LabelsBuilder) Get(key string) (string, bool) {
+	fmt.Printf("get label %s\n", key)
 	for _, a := range b.add {
+		fmt.Printf("checking %s\n", a.Name)
 		if a.Name == key {
 			return a.Value, true
 		}
 		if strings.HasPrefix(a.Name, "_json") && a.Name[5:] == key {
+			fmt.Printf("return escaped %s\n", a.Name)
 			// TODO: instead of unescaping here we should escape the
 			// value we compare with
 			return unescapeJSONString2(unsafeGetBytes(a.Value)), true
@@ -229,7 +232,7 @@ func (b *LabelsBuilder) Get(key string) (string, bool) {
 func (b *LabelsBuilder) Del(ns ...string) *LabelsBuilder {
 	for _, n := range ns {
 		for i, a := range b.add {
-			if a.Name == n {
+			if a.Name == n || (strings.HasPrefix(a.Name, "_json") && a.Name[5:] == n) {
 				b.add = append(b.add[:i], b.add[i+1:]...)
 			}
 		}
