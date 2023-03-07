@@ -307,7 +307,8 @@ Outer:
 	// Unsecape JSON
 	for i, l := range b.add {
 		if strings.HasPrefix(l.Name, "_json") {
-			b.add[i].Value = unescapeJSONString2(unsafeGetBytes(l.Value))
+			bU := unsafeGetBytes(l.Value)
+			b.add[i].Value = unescapeJSONString2(bU)
 			b.add[i].Name = l.Name[5:]
 		}
 	}
@@ -316,12 +317,12 @@ Outer:
 }
 
 func unescapeJSONString2(b []byte) string {
-	var stackbuf [unescapeStackBufSize]byte // stack-allocated array for allocation-free unescaping of small strings
-	bU, err := jsonparser.Unescape(b, stackbuf[:])
+	stackbuf := make([]byte, 0, len(b))
+	bU, err := jsonparser.Unescape(b, stackbuf)
 	if err != nil {
 		return ""
 	}
-	res := string(bU)
+	res := unsafeGetString(bU)
 	// rune error is rejected by Prometheus
 	for _, r := range res {
 		if r == utf8.RuneError {
