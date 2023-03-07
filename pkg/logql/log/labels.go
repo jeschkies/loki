@@ -200,9 +200,11 @@ func (b *LabelsBuilder) Get(key string) (string, bool) {
 			return a.Value, true
 		}
 		if strings.HasPrefix(a.Name, "_json") && a.Name[5:] == key {
+			a.Name = a.Name[5:]
 			// TODO: instead of unescaping here we should escape the
 			// value we compare with
-			return unescapeJSONString2(unsafeGetBytes(a.Value)), true
+			a.Value = unescapeJSONString2(unsafeGetBytes(a.Value))
+			return a.Value, true
 		}
 	}
 	for _, d := range b.del {
@@ -216,9 +218,11 @@ func (b *LabelsBuilder) Get(key string) (string, bool) {
 			return l.Value, true
 		}
 		if strings.HasPrefix(l.Name, "_json") && l.Name[5:] == key {
+			l.Name = l.Name[5:]
 			// TODO: instead of unescaping here we should escape the
 			// value we compare with
-			return unescapeJSONString2(unsafeGetBytes(l.Value)), true
+			l.Value = unescapeJSONString2(unsafeGetBytes(l.Value))
+			return l.Value, true
 		}
 	}
 	return "", false
