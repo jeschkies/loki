@@ -1,6 +1,7 @@
 package log
 
 import (
+	"fmt"
 	"sort"
 	"strings"
 	"unicode/utf8"
@@ -303,6 +304,7 @@ Outer:
 	// Unsecape JSON
 	for i, l := range b.add {
 		if strings.HasPrefix(l.Name, "_json") {
+			fmt.Printf("escpaing label %s\n", l.Name)
 			b.add[i].Value = unescapeJSONString2(unsafeGetBytes(l.Value))
 			b.add[i].Name = l.Name[5:]
 		}
@@ -347,6 +349,7 @@ func (b *LabelsBuilder) Map() map[string]string {
 // LabelsResult returns the LabelsResult from the builder.
 // No grouping is applied and the cache is used when possible.
 func (b *LabelsBuilder) LabelsResult() LabelsResult {
+	fmt.Println("calling LabelsResult")
 	// unchanged path.
 	if len(b.del) == 0 && len(b.add) == 0 && b.err == "" {
 		return b.currentResult
@@ -355,10 +358,13 @@ func (b *LabelsBuilder) LabelsResult() LabelsResult {
 }
 
 func (b *BaseLabelsBuilder) toResult(buf labels.Labels) LabelsResult {
+	fmt.Println("calling toResult")
 	hash := b.hasher.Hash(buf)
 	if cached, ok := b.resultCache[hash]; ok {
+		fmt.Println("using cached")
 		return cached
 	}
+	fmt.Printf("build new result for hash %d from %s\n", hash, buf.String())
 	res := NewLabelsResult(buf.Copy(), hash)
 	b.resultCache[hash] = res
 	return res
@@ -393,6 +399,7 @@ func (b *LabelsBuilder) GroupedLabels() LabelsResult {
 }
 
 func (b *LabelsBuilder) withResult() LabelsResult {
+	fmt.Println("calling withResult")
 	if b.buf == nil {
 		b.buf = make(labels.Labels, 0, len(b.groups))
 	} else {
@@ -406,6 +413,11 @@ Outer:
 			}
 		}
 		for _, la := range b.add {
+			if strings.HasPrefix(la.Name, "_json") {
+				fmt.Printf("escaping label %s\n", la.Name)
+				la.Value = unescapeJSONString2(unsafeGetBytes(la.Value))
+				la.Name = la.Name[5:]
+			}
 			if g == la.Name {
 				b.buf = append(b.buf, la)
 				continue Outer
@@ -418,10 +430,19 @@ Outer:
 			}
 		}
 	}
+	// Unsecape JSON
+	for i, l := range b.add {
+		if strings.HasPrefix(l.Name, "_json") {
+			fmt.Printf("escpaing label %s\n", l.Name)
+			b.add[i].Value = unescapeJSONString2(unsafeGetBytes(l.Value))
+			b.add[i].Name = l.Name[5:]
+		}
+	}
 	return b.toResult(b.buf)
 }
 
 func (b *LabelsBuilder) withoutResult() LabelsResult {
+	fmt.Println("calling withoutResult")
 	if b.buf == nil {
 		size := len(b.base) + len(b.add) - len(b.del) - len(b.groups)
 		if size < 0 {
