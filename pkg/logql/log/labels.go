@@ -1,6 +1,7 @@
 package log
 
 import (
+	"fmt"
 	"sort"
 	"strings"
 	"unicode/utf8"
@@ -298,13 +299,14 @@ Outer:
 			}
 		}
 		for _, la := range b.add {
-			if l.Name == la.Name {
+			if l.Name == la.Name || (strings.HasPrefix(l.Name, "_json") && l.Name == l.Name[5:]) {
 				continue Outer
 			}
 		}
 		buf = append(buf, l)
 	}
 	// Unsecape JSON
+	fmt.Println("escaping add")
 	for i, l := range b.add {
 		if strings.HasPrefix(l.Name, "_json") {
 			bU := unsafeGetBytes(l.Value)
