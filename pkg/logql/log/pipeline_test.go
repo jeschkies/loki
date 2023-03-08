@@ -475,7 +475,8 @@ func Benchmark_ParserLabelFilter(b *testing.B) {
 		lines            int
 		matchPropability float32
 	}{
-		{100, 20},
+		{1000, 0.2},
+		{1000, 0.01},
 	} {
 		tt := tt
 		p := NewPipeline([]Stage{
