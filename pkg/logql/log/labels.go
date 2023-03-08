@@ -197,14 +197,11 @@ func (b *LabelsBuilder) BaseHas(key string) bool {
 func (b *LabelsBuilder) Get(key string) (string, bool) {
 	for _, a := range b.add {
 		if a.Name == key {
-			return a.Value, true
-		}
-		if strings.HasPrefix(a.Name, "_json") && a.Name[5:] == key {
-			a.Name = a.Name[5:]
+			//just for benchmarking
+			//return a.Value, true
 			// TODO: instead of unescaping here we should escape the
 			// value we compare with
 			a.Value = unescapeJSONString2(unsafeGetBytes(a.Value))
-			return a.Value, true
 		}
 	}
 	for _, d := range b.del {
@@ -217,13 +214,15 @@ func (b *LabelsBuilder) Get(key string) (string, bool) {
 		if l.Name == key {
 			return l.Value, true
 		}
-		if strings.HasPrefix(l.Name, "_json") && l.Name[5:] == key {
-			l.Name = l.Name[5:]
-			// TODO: instead of unescaping here we should escape the
-			// value we compare with
-			l.Value = unescapeJSONString2(unsafeGetBytes(l.Value))
-			return l.Value, true
-		}
+		/*
+			if strings.HasPrefix(l.Name, "_json") && l.Name[5:] == key {
+				l.Name = l.Name[5:]
+				// TODO: instead of unescaping here we should escape the
+				// value we compare with
+				l.Value = unescapeJSONString2(unsafeGetBytes(l.Value))
+				return l.Value, true
+			}
+		*/
 	}
 	return "", false
 }
@@ -232,7 +231,7 @@ func (b *LabelsBuilder) Get(key string) (string, bool) {
 func (b *LabelsBuilder) Del(ns ...string) *LabelsBuilder {
 	for _, n := range ns {
 		for i, a := range b.add {
-			if a.Name == n || (strings.HasPrefix(a.Name, "_json") && a.Name[5:] == n) {
+			if a.Name == n {
 				b.add = append(b.add[:i], b.add[i+1:]...)
 			}
 		}
@@ -298,7 +297,7 @@ Outer:
 			}
 		}
 		for _, la := range b.add {
-			if l.Name == la.Name || (strings.HasPrefix(l.Name, "_json") && l.Name == l.Name[5:]) {
+			if l.Name == la.Name {
 				continue Outer
 			}
 		}
@@ -306,11 +305,8 @@ Outer:
 	}
 	// Unsecape JSON
 	for i, l := range b.add {
-		if strings.HasPrefix(l.Name, "_json") {
-			bU := unsafeGetBytes(l.Value)
-			b.add[i].Value = unescapeJSONString2(bU)
-			b.add[i].Name = l.Name[5:]
-		}
+		bU := unsafeGetBytes(l.Value)
+		b.add[i].Value = unescapeJSONString2(bU)
 	}
 	buf = append(buf, b.add...)
 	return b.appendErrors(buf)

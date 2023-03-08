@@ -116,7 +116,7 @@ func (j *JSONParser) parseLabelValue(key, value []byte, dataType jsonparser.Valu
 		if !ok {
 			return
 		}
-		j.lbs.Set("_json"+key, readValue(value, dataType))
+		j.lbs.Set(key, readValue(value, dataType))
 		return
 
 	}
@@ -141,7 +141,7 @@ func (j *JSONParser) parseLabelValue(key, value []byte, dataType jsonparser.Valu
 	if !ok {
 		return
 	}
-	j.lbs.Set("_json"+keyString, readValue(value, dataType))
+	j.lbs.Set(keyString, readValue(value, dataType))
 }
 
 func (j *JSONParser) RequiredLabelNames() []string { return []string{} }
