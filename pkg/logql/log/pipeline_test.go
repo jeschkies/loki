@@ -1,6 +1,8 @@
 package log
 
 import (
+	"fmt"
+	"math/rand"
 	"sort"
 	"testing"
 	"time"
@@ -451,4 +453,50 @@ func BenchmarkLogfmtExpressionParser(b *testing.B) {
 	}
 
 	logfmtBenchmark(b, parser)
+}
+
+func Benchmark_ParserLabelFilter(b *testing.B) {
+	lineTemplate := `{
+	"one": "1",
+	"two": "1",
+	"three": "1",
+	"four": "1",
+	"five": "1",
+	"six": "1",
+	"seven": "1",
+	"eight": "1",
+	"nine": "1",
+	"ten": "1",
+	"eleven": "1",
+	"twelve": "1",
+	"filter": "%s" 
+	}`
+	for _, tt := range []struct {
+		lines            int
+		matchPropability float32
+	}{
+		{100, 20},
+	} {
+		tt := tt
+		p := NewPipeline([]Stage{
+			NewJSONParser(),
+			NewStringLabelFilter(labels.MustNewMatcher(labels.MatchEqual, "filter", "yes")),
+		})
+		r := rand.New(rand.NewSource(42))
+		var lines [][]byte
+		for l := 0; l < tt.lines; l++ {
+			flag := "no"
+			if r.Float32() < tt.matchPropability {
+				flag = "yes"
+			}
+			lines = append(lines, []byte(fmt.Sprintf(lineTemplate, flag)))
+		}
+		b.Run(fmt.Sprintf("%d-lines-%f-matches", tt.lines, tt.matchPropability), func(b *testing.B) {
+			for n := 0; n < b.N; n++ {
+				for _, line := range lines {
+					p.ForStream(labels.Labels{}).Process(0, line)
+				}
+			}
+		})
+	}
 }
