@@ -494,8 +494,15 @@ func Benchmark_ParserLabelFilter(b *testing.B) {
 		}
 		b.Run(fmt.Sprintf("%d-lines-%f-matches", tt.lines, tt.matchPropability), func(b *testing.B) {
 			for n := 0; n < b.N; n++ {
+				matches := 0
 				for _, line := range lines {
-					p.ForStream(labels.Labels{}).Process(0, line)
+					_, _, m := p.ForStream(labels.Labels{}).Process(0, line)
+					if m {
+						matches++
+					}
+				}
+				if matches != int(tt.matchPropability*float32(len(lines))) {
+					b.Fatalf("%d matches but %d expected", matches, int(tt.matchPropability*float32(len(lines))))
 				}
 			}
 		})
