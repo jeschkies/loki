@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/prometheus/prometheus/model/labels"
+
 	"github.com/grafana/loki/pkg/logql/syntax"
 )
 
@@ -17,16 +19,25 @@ func (p *Plan) String() string {
 
 type Operator interface {
 	Child() Operator
+	SetChild(Operator)
 	String() string
 }
 
-type Aggregation struct {
-	Kind  string
+type Parent struct {
 	child Operator
 }
 
-func (a *Aggregation) Child() Operator {
-	return a.child
+func (p *Parent) Child() Operator {
+	return p.child
+}
+
+func (p *Parent) SetChild(o Operator) {
+	p.child = o
+}
+
+type Aggregation struct {
+	Kind string
+	Parent
 }
 
 func (a *Aggregation) String() string {
@@ -36,8 +47,32 @@ func (a *Aggregation) String() string {
 	return fmt.Sprintf("Aggregation(kind=%s)", a.Kind)
 }
 
-type Projection struct {
-	Child Operator
+type Filter struct {
+	op    string
+	match string
+	ty    labels.MatchType
+	Kind  string
+	Parent
+}
+
+func (f *Filter) String() string {
+	//return fmt.Sprintf("Filter(ty=%s, match='%s')", f.ty, f.match)
+	if f.child != nil {
+		return fmt.Sprintf("Filter(kind=%s, %s)", f.Kind, f.child.String())
+	}
+	return fmt.Sprintf("Filter(kind=%s)", f.Kind)
+}
+
+type Map struct {
+	Kind string
+	Parent
+}
+
+func (m *Map) String() string {
+	if m.child != nil {
+		return fmt.Sprintf("Map(kind=%s, %s)", m.Kind, m.child)
+	}
+	return fmt.Sprintf("Map(kind=%s)", m.Kind)
 }
 
 type Scan struct {
@@ -47,6 +82,8 @@ type Scan struct {
 func (s *Scan) Child() Operator {
 	return nil
 }
+
+func (s *Scan) SetChild(_ Operator) {}
 
 func (s *Scan) String() string {
 	return fmt.Sprintf("Scan(labels=%s)", s.Labels)
@@ -65,29 +102,60 @@ func Build(query string) (*Plan, error) {
 func build(expr syntax.Expr) Operator {
 	switch concrete := expr.(type) {
 	case *syntax.VectorAggregationExpr:
-		return &Aggregation{Kind: concrete.Operation, child: build(concrete.Left)}
+		return &Aggregation{Kind: concrete.Operation, Parent: Parent{build(concrete.Left)}}
 	case *syntax.RangeAggregationExpr:
-		return &Aggregation{Kind: concrete.Operation, child: build(concrete.Left)}
+		// TODO: add range interval
+		// concrete.Left.Interval
+		child := build(concrete.Left)
+		return &Aggregation{Kind: concrete.Operation, Parent: Parent{child}}
 	case *syntax.LogRange:
 		var sb strings.Builder
 		for _, m := range concrete.Left.Matchers() {
 			sb.WriteString(m.String())
 		}
 
-		build(concrete.Left.LogPipelineExpr)
+		s := build(concrete.Left)
+		scan := &Scan{Labels: sb.String()}
 
-		scan := &Scan{Labels: sb.String()} 
+		if s == nil {
+			return scan
+		}
 
-		// The pipeline is reversed.
+		if concrete.Unwrap != nil {
+			//	&Map{ Kind: "unwrap" }
+		}
 
-		return scan
-		/*
-		 *syntax.PipelineExpr
-		 *syntax.MatchersExpr
-		 *syntax.LineFilterExpr
-		 *syntax.LabelParserExpr
-		 *syntax.LabelFilterExpr
-		 */
+		// Push scan to the bottom.
+		leaf := s
+		for leaf.Child() != nil {
+			leaf = leaf.Child()
+		}
+
+		leaf.SetChild(scan)
+		return s
+	case *syntax.PipelineExpr:
+		var current Operator
+		var root Operator
+		for _, s := range concrete.MultiStages {
+			stage := build(s)
+			if current != nil {
+				current.SetChild(stage)
+			} else {
+				root = stage
+			}
+			current = stage
+		}
+		return root
+	case *syntax.LineFilterExpr:
+		//return &Filter{op: concrete.Op, ty: concrete.Ty, match: concrete.Match}
+		return &Filter{Kind: "contains"}
+	case *syntax.LabelFilterExpr:
+		return &Filter{Kind: "label"}
+	case *syntax.LabelParserExpr:
+		// TODO: Not sure this is really a map operation
+		return &Map{Kind: "parser"}
+	default:
+		fmt.Printf("unsupported: %T(%s)\n", expr, expr)
 	}
 	return nil
 }
