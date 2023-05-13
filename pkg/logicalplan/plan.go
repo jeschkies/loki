@@ -2,6 +2,7 @@ package logicalplan
 
 import (
 	"fmt"
+	"io"
 	"strings"
 
 	"github.com/prometheus/prometheus/model/labels"
@@ -15,6 +16,23 @@ type Plan struct {
 
 func (p *Plan) String() string {
 	return p.Root.String()
+}
+
+func (p *Plan) Graphviz(w io.StringWriter) {
+	w.WriteString(`digraph { node [shape=rect];rankdir="BT";`)
+
+	c := p.Root
+	i := 0
+	for c != nil {
+		w.WriteString(fmt.Sprintf(`%d [label="%T"];`, i, c))
+		if c.Child() != nil {
+			w.WriteString(fmt.Sprintf(`%d -> %d;`, i+1, i))
+		}
+		i++
+		c = c.Child()
+	}
+
+	w.WriteString("}")
 }
 
 type Operator interface {
