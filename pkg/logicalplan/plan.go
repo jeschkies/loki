@@ -21,18 +21,47 @@ func (p *Plan) String() string {
 func (p *Plan) Graphviz(w io.StringWriter) {
 	w.WriteString(`digraph { node [shape=rect];rankdir="BT";`)
 
-	c := p.Root
-	i := 0
-	for c != nil {
-		w.WriteString(fmt.Sprintf(`%d [label="%T"];`, i, c))
-		if c.Child() != nil {
-			w.WriteString(fmt.Sprintf(`%d -> %d;`, i+1, i))
-		}
-		i++
-		c = c.Child()
-	}
+	visitor := &Graphviz{id: 0, writer: w}
+	p.Root.Accept(visitor)
 
 	w.WriteString("}")
+}
+
+type Graphviz struct {
+	id     int
+	writer io.StringWriter
+}
+
+func (g *Graphviz) visitAggregation(a *Aggregation) {
+	g.writer.WriteString(fmt.Sprintf(`%d [label="Aggregation:%s"];`, g.id, a.Details.Name()))
+	if a.Child() != nil {
+		g.writer.WriteString(fmt.Sprintf(`%d -> %d;`, g.id+1, g.id))
+	}
+	g.id++
+}
+
+func (g *Graphviz) visitFilter(f *Filter) {
+	g.writer.WriteString(fmt.Sprintf(`%d [label="Filter"];`, g.id))
+	if f.Child() != nil {
+		g.writer.WriteString(fmt.Sprintf(`%d -> %d;`, g.id+1, g.id))
+	}
+	g.id++
+}
+
+func (g *Graphviz) visitMap(m *Map) {
+	g.writer.WriteString(fmt.Sprintf(`%d [label="Map"];`, g.id))
+	if m.Child() != nil {
+		g.writer.WriteString(fmt.Sprintf(`%d -> %d;`, g.id+1, g.id))
+	}
+	g.id++
+}
+
+func (g *Graphviz) visitScan(s *Scan) {
+	g.writer.WriteString(fmt.Sprintf(`%d [label="Scan"];`, g.id))
+	if s.Child() != nil {
+		g.writer.WriteString(fmt.Sprintf(`%d -> %d;`, g.id+1, g.id))
+	}
+	g.id++
 }
 
 type Operator interface {
@@ -79,6 +108,9 @@ func (a *Aggregation) String() string {
 
 func (a *Aggregation) Accept(v Visitor) {
 	v.visitAggregation(a)
+	if a.Child() != nil {
+		a.Child().Accept(v)
+	}
 }
 
 type Sum struct{}
@@ -111,6 +143,9 @@ func (f *Filter) String() string {
 
 func (f *Filter) Accept(v Visitor) {
 	v.visitFilter(f)
+	if f.Child() != nil {
+		f.Child().Accept(v)
+	}
 }
 
 type Map struct {
@@ -127,6 +162,9 @@ func (m *Map) String() string {
 
 func (m *Map) Accept(v Visitor) {
 	v.visitMap(m)
+	if m.Child() != nil {
+		m.Child().Accept(v)
+	}
 }
 
 type Scan struct {
@@ -145,6 +183,9 @@ func (s *Scan) String() string {
 
 func (s *Scan) Accept(v Visitor) {
 	v.visitScan(s)
+	if s.Child() != nil {
+		s.Child().Accept(v)
+	}
 }
 
 func Build(query string) (*Plan, error) {
