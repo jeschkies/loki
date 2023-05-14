@@ -39,6 +39,14 @@ type Operator interface {
 	Child() Operator
 	SetChild(Operator)
 	String() string
+	Accept(Visitor)
+}
+
+type Visitor interface {
+	visitAggregation(*Aggregation)
+	visitFilter(*Filter)
+	visitMap(*Map)
+	visitScan(*Scan)
 }
 
 type Parent struct {
@@ -53,16 +61,36 @@ func (p *Parent) SetChild(o Operator) {
 	p.child = o
 }
 
+type AggregationDetails interface {
+	Name() string
+}
+
 type Aggregation struct {
-	Kind string
+	Details AggregationDetails
 	Parent
 }
 
 func (a *Aggregation) String() string {
 	if a.child != nil {
-		return fmt.Sprintf("Aggregation(kind=%s, %s)", a.Kind, a.child.String())
+		return fmt.Sprintf("Aggregation(kind=%s, %s)", a.Details.Name(), a.child.String())
 	}
-	return fmt.Sprintf("Aggregation(kind=%s)", a.Kind)
+	return fmt.Sprintf("Aggregation(kind=%s)", a.Details.Name())
+}
+
+func (a *Aggregation) Accept(v Visitor) {
+	v.visitAggregation(a)
+}
+
+type Sum struct{}
+
+func (s *Sum) Name() string {
+	return "sum"
+}
+
+type Rate struct{}
+
+func (s *Rate) Name() string {
+	return "rate"
 }
 
 type Filter struct {
@@ -81,6 +109,10 @@ func (f *Filter) String() string {
 	return fmt.Sprintf("Filter(kind=%s)", f.Kind)
 }
 
+func (f *Filter) Accept(v Visitor) {
+	v.visitFilter(f)
+}
+
 type Map struct {
 	Kind string
 	Parent
@@ -91,6 +123,10 @@ func (m *Map) String() string {
 		return fmt.Sprintf("Map(kind=%s, %s)", m.Kind, m.child)
 	}
 	return fmt.Sprintf("Map(kind=%s)", m.Kind)
+}
+
+func (m *Map) Accept(v Visitor) {
+	v.visitMap(m)
 }
 
 type Scan struct {
@@ -107,6 +143,10 @@ func (s *Scan) String() string {
 	return fmt.Sprintf("Scan(labels=%s)", s.Labels)
 }
 
+func (s *Scan) Accept(v Visitor) {
+	v.visitScan(s)
+}
+
 func Build(query string) (*Plan, error) {
 	expr, err := syntax.ParseExpr(query)
 	if err != nil {
@@ -120,12 +160,20 @@ func Build(query string) (*Plan, error) {
 func build(expr syntax.Expr) Operator {
 	switch concrete := expr.(type) {
 	case *syntax.VectorAggregationExpr:
-		return &Aggregation{Kind: concrete.Operation, Parent: Parent{build(concrete.Left)}}
+		var details AggregationDetails
+		if concrete.Operation == syntax.OpTypeSum {
+			details = &Sum{}
+		}
+		return &Aggregation{Details: details, Parent: Parent{build(concrete.Left)}}
 	case *syntax.RangeAggregationExpr:
 		// TODO: add range interval
 		// concrete.Left.Interval
 		child := build(concrete.Left)
-		return &Aggregation{Kind: concrete.Operation, Parent: Parent{child}}
+		var details AggregationDetails
+		if concrete.Operation == syntax.OpRangeTypeRate {
+			details = &Rate{}
+		}
+		return &Aggregation{Details: details, Parent: Parent{child}}
 	case *syntax.LogRange:
 		var sb strings.Builder
 		for _, m := range concrete.Left.Matchers() {
