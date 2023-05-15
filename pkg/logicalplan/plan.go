@@ -167,6 +167,28 @@ func (m *Map) Accept(v Visitor) {
 	}
 }
 
+type Binary struct {
+	Kind string
+	lhs  Operator
+	rhs  Operator
+}
+
+func (b *Binary) String() string {
+	return fmt.Sprintf("Binary(kind=%s, %s, %s)", b.Kind, b.lhs, b.rhs)
+}
+
+func (b *Binary) Accept(v Visitor) {
+	// TODO
+}
+
+func (b *Binary) Child() Operator {
+	return nil // TODO
+}
+
+func (b *Binary) SetChild(o Operator) {
+	// TODO
+}
+
 type Scan struct {
 	Labels string
 }
@@ -194,38 +216,52 @@ func Build(query string) (*Plan, error) {
 		return nil, err
 	}
 
-	plan := &Plan{Root: build(expr)}
+	r, err := build(expr)
+	if err != nil {
+		return nil, err
+	}
+	plan := &Plan{Root: r}
 	return plan, nil
 }
 
-func build(expr syntax.Expr) Operator {
+func build(expr syntax.Expr) (Operator, error) {
 	switch concrete := expr.(type) {
 	case *syntax.VectorAggregationExpr:
 		var details AggregationDetails
 		if concrete.Operation == syntax.OpTypeSum {
 			details = &Sum{}
 		}
-		return &Aggregation{Details: details, Parent: Parent{build(concrete.Left)}}
+		p, err := build(concrete.Left)
+		if err != nil {
+			return nil, err
+		}
+		return &Aggregation{Details: details, Parent: Parent{p}}, nil
 	case *syntax.RangeAggregationExpr:
 		// TODO: add range interval
 		// concrete.Left.Interval
-		child := build(concrete.Left)
+		child, err := build(concrete.Left)
+		if err != nil {
+			return nil, err
+		}
 		var details AggregationDetails
 		if concrete.Operation == syntax.OpRangeTypeRate {
 			details = &Rate{}
 		}
-		return &Aggregation{Details: details, Parent: Parent{child}}
+		return &Aggregation{Details: details, Parent: Parent{child}}, nil
 	case *syntax.LogRange:
 		var sb strings.Builder
 		for _, m := range concrete.Left.Matchers() {
 			sb.WriteString(m.String())
 		}
 
-		s := build(concrete.Left)
+		s, err := build(concrete.Left)
+		if err != nil {
+			return nil, err
+		}
 		scan := &Scan{Labels: sb.String()}
 
 		if s == nil {
-			return scan
+			return scan, nil
 		}
 
 		if concrete.Unwrap != nil {
@@ -239,12 +275,15 @@ func build(expr syntax.Expr) Operator {
 		}
 
 		leaf.SetChild(scan)
-		return s
+		return s, nil
 	case *syntax.PipelineExpr:
 		var current Operator
 		var root Operator
 		for _, s := range concrete.MultiStages {
-			stage := build(s)
+			stage, err := build(s)
+			if err != nil {
+				return nil, err
+			}
 			if current != nil {
 				current.SetChild(stage)
 			} else {
@@ -252,17 +291,28 @@ func build(expr syntax.Expr) Operator {
 			}
 			current = stage
 		}
-		return root
+		return root, nil
 	case *syntax.LineFilterExpr:
 		//return &Filter{op: concrete.Op, ty: concrete.Ty, match: concrete.Match}
-		return &Filter{Kind: "contains"}
+		return &Filter{Kind: "contains"}, nil
 	case *syntax.LabelFilterExpr:
-		return &Filter{Kind: "label"}
+		return &Filter{Kind: "label"}, nil
 	case *syntax.LabelParserExpr:
 		// TODO: Not sure this is really a map operation
-		return &Map{Kind: "parser"}
+		return &Map{Kind: "parser"}, nil
+	case *syntax.BinOpExpr:
+		lhs, err := build(concrete.SampleExpr)
+		if err != nil {
+			return nil, err
+		}
+
+		rhs, err := build(concrete.RHS)
+		if err != nil {
+			return nil, err
+		}
+
+		return &Binary{Kind: concrete.Op, lhs: lhs, rhs: rhs}, nil
 	default:
-		fmt.Printf("unsupported: %T(%s)\n", expr, expr)
+		return nil, fmt.Errorf("unsupported: %T(%s)", expr, expr)
 	}
-	return nil
 }
