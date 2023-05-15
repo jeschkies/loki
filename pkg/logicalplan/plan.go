@@ -276,6 +276,12 @@ func build(expr syntax.Expr) (Operator, error) {
 
 		leaf.SetChild(scan)
 		return s, nil
+	case *syntax.MatchersExpr:
+		var sb strings.Builder
+		for _, m := range concrete.Mts {
+			sb.WriteString(m.String())
+		}
+		return &Scan{Labels: sb.String()}, nil
 	case *syntax.PipelineExpr:
 		var current Operator
 		var root Operator
