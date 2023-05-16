@@ -45,6 +45,14 @@ func (g *Graphviz) visitAggregation(a *Aggregation) {
 func (g *Graphviz) visitBinary(b *Binary) {
 	g.writer.WriteString(fmt.Sprintf(`"%s" [label="Binary:%s"];`, b.GetID(), b.Kind))
 	g.writer.WriteString("\n")
+	if b.lhs != nil {
+		g.writer.WriteString(fmt.Sprintf(`"%s" -> "%s";`, b.lhs.GetID(), b.GetID()))
+		g.writer.WriteString("\n")
+	}
+	if b.rhs != nil {
+		g.writer.WriteString(fmt.Sprintf(`"%s" -> "%s";`, b.rhs.GetID(), b.GetID()))
+		g.writer.WriteString("\n")
+	}
 }
 
 func (g *Graphviz) visitFilter(f *Filter) {
@@ -210,7 +218,13 @@ func (b *Binary) String() string {
 }
 
 func (b *Binary) Accept(v Visitor) {
-	// TODO
+	v.visitBinary(b)
+	if b.lhs != nil {
+		b.lhs.Accept(v)
+	}
+	if b.rhs != nil {
+		b.rhs.Accept(v)
+	}
 }
 
 func (b *Binary) Child() Operator {
