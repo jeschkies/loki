@@ -58,7 +58,7 @@ func (g *Graphviz) visitBinary(b *Binary) {
 }
 
 func (g *Graphviz) visitFilter(f *Filter) {
-	g.writer.WriteString(fmt.Sprintf(`"%s" [label="Filter"];`, f.GetID()))
+	g.writer.WriteString(fmt.Sprintf(`"%s" [label="Filter:%s"];`, f.GetID(), f.Kind))
 	g.writer.WriteString("\n")
 	if f.Child() != nil {
 		g.writer.WriteString(fmt.Sprintf(`"%s" -> "%s";`, f.Child().GetID(), f.GetID()))
@@ -67,7 +67,7 @@ func (g *Graphviz) visitFilter(f *Filter) {
 }
 
 func (g *Graphviz) visitMap(m *Map) {
-	g.writer.WriteString(fmt.Sprintf(`"%s" [label="Map"];`, m.GetID()))
+	g.writer.WriteString(fmt.Sprintf(`"%s" [label="Map:%s"];`, m.GetID(), m.Kind))
 	g.writer.WriteString("\n")
 	if m.Child() != nil {
 		g.writer.WriteString(fmt.Sprintf(`"%s" -> "%s";`, m.Child().GetID(), m.GetID()))
