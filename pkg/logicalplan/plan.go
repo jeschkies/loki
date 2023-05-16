@@ -5,6 +5,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/prometheus/prometheus/model/labels"
 
 	"github.com/grafana/loki/pkg/logql/syntax"
@@ -20,51 +21,61 @@ func (p *Plan) String() string {
 
 func (p *Plan) Graphviz(w io.StringWriter) {
 	w.WriteString(`digraph { node [shape=rect];rankdir="BT";`)
+	w.WriteString("\n")
 
-	visitor := &Graphviz{id: 0, writer: w}
+	visitor := &Graphviz{writer: w}
 	p.Root.Accept(visitor)
 
 	w.WriteString("}")
 }
 
 type Graphviz struct {
-	id     int
 	writer io.StringWriter
 }
 
 func (g *Graphviz) visitAggregation(a *Aggregation) {
-	g.writer.WriteString(fmt.Sprintf(`%d [label="Aggregation:%s"];`, g.id, a.Details.Name()))
+	g.writer.WriteString(fmt.Sprintf(`%s [label="Aggregation:%s"];`, a.GetID(), a.Details.Name()))
+	g.writer.WriteString("\n")
 	if a.Child() != nil {
-		g.writer.WriteString(fmt.Sprintf(`%d -> %d;`, g.id+1, g.id))
+		g.writer.WriteString(fmt.Sprintf(`%s -> %s;`, a.Child().GetID(), a.GetID()))
+		g.writer.WriteString("\n")
 	}
-	g.id++
+}
+
+func (g *Graphviz) visitBinary(b *Binary) {
+	g.writer.WriteString(fmt.Sprintf(`%s [label="Binary:%s"];`, b.GetID(), b.Kind))
+	g.writer.WriteString("\n")
 }
 
 func (g *Graphviz) visitFilter(f *Filter) {
-	g.writer.WriteString(fmt.Sprintf(`%d [label="Filter"];`, g.id))
+	g.writer.WriteString(fmt.Sprintf(`%s [label="Filter"];`, f.GetID()))
+	g.writer.WriteString("\n")
 	if f.Child() != nil {
-		g.writer.WriteString(fmt.Sprintf(`%d -> %d;`, g.id+1, g.id))
+		g.writer.WriteString(fmt.Sprintf(`%s -> %s;`, f.Child().GetID(), f.GetID()))
+		g.writer.WriteString("\n")
 	}
-	g.id++
 }
 
 func (g *Graphviz) visitMap(m *Map) {
-	g.writer.WriteString(fmt.Sprintf(`%d [label="Map"];`, g.id))
+	g.writer.WriteString(fmt.Sprintf(`%s [label="Map"];`, m.GetID()))
+	g.writer.WriteString("\n")
 	if m.Child() != nil {
-		g.writer.WriteString(fmt.Sprintf(`%d -> %d;`, g.id+1, g.id))
+		g.writer.WriteString(fmt.Sprintf(`%s -> %s;`, m.Child().GetID(), m.GetID()))
+		g.writer.WriteString("\n")
 	}
-	g.id++
 }
 
 func (g *Graphviz) visitScan(s *Scan) {
-	g.writer.WriteString(fmt.Sprintf(`%d [label="Scan"];`, g.id))
+	g.writer.WriteString(fmt.Sprintf(`%s [label="Scan\nLabels:..."];`, s.GetID()))
+	g.writer.WriteString("\n")
 	if s.Child() != nil {
-		g.writer.WriteString(fmt.Sprintf(`%d -> %d;`, g.id+1, g.id))
+		g.writer.WriteString(fmt.Sprintf(`%s -> %s;`, s.Child().GetID(), s.GetID()))
+		g.writer.WriteString("\n")
 	}
-	g.id++
 }
 
 type Operator interface {
+	GetID() string
 	Child() Operator
 	SetChild(Operator)
 	String() string
@@ -73,6 +84,7 @@ type Operator interface {
 
 type Visitor interface {
 	visitAggregation(*Aggregation)
+	visitBinary(*Binary)
 	visitFilter(*Filter)
 	visitMap(*Map)
 	visitScan(*Scan)
@@ -80,6 +92,18 @@ type Visitor interface {
 
 type Parent struct {
 	child Operator
+}
+
+type ID struct {
+	uuid.UUID
+}
+
+func NewID() ID {
+	return ID{uuid.New()}
+}
+
+func (i ID) GetID() string {
+	return i.UUID.String()
 }
 
 func (p *Parent) Child() Operator {
@@ -96,6 +120,7 @@ type AggregationDetails interface {
 
 type Aggregation struct {
 	Details AggregationDetails
+	ID
 	Parent
 }
 
@@ -113,19 +138,24 @@ func (a *Aggregation) Accept(v Visitor) {
 	}
 }
 
-type Sum struct{}
+type Sum struct {
+	ID
+}
 
 func (s *Sum) Name() string {
 	return "sum"
 }
 
-type Rate struct{}
+type Rate struct {
+	ID
+}
 
 func (s *Rate) Name() string {
 	return "rate"
 }
 
 type Filter struct {
+	ID
 	op    string
 	match string
 	ty    labels.MatchType
@@ -149,6 +179,7 @@ func (f *Filter) Accept(v Visitor) {
 }
 
 type Map struct {
+	ID
 	Kind string
 	Parent
 }
@@ -168,6 +199,7 @@ func (m *Map) Accept(v Visitor) {
 }
 
 type Binary struct {
+	ID
 	Kind string
 	lhs  Operator
 	rhs  Operator
@@ -190,6 +222,7 @@ func (b *Binary) SetChild(o Operator) {
 }
 
 type Scan struct {
+	ID
 	Labels string
 }
 
@@ -235,7 +268,7 @@ func build(expr syntax.Expr) (Operator, error) {
 		if err != nil {
 			return nil, err
 		}
-		return &Aggregation{Details: details, Parent: Parent{p}}, nil
+		return &Aggregation{ID: NewID(), Details: details, Parent: Parent{p}}, nil
 	case *syntax.RangeAggregationExpr:
 		// TODO: add range interval
 		// concrete.Left.Interval
@@ -247,7 +280,7 @@ func build(expr syntax.Expr) (Operator, error) {
 		if concrete.Operation == syntax.OpRangeTypeRate {
 			details = &Rate{}
 		}
-		return &Aggregation{Details: details, Parent: Parent{child}}, nil
+		return &Aggregation{ID: NewID(), Details: details, Parent: Parent{child}}, nil
 	case *syntax.LogRange:
 		var sb strings.Builder
 		for _, m := range concrete.Left.Matchers() {
@@ -258,7 +291,7 @@ func build(expr syntax.Expr) (Operator, error) {
 		if err != nil {
 			return nil, err
 		}
-		scan := &Scan{Labels: sb.String()}
+		scan := &Scan{ID: NewID(), Labels: sb.String()}
 
 		if s == nil {
 			return scan, nil
@@ -281,7 +314,7 @@ func build(expr syntax.Expr) (Operator, error) {
 		for _, m := range concrete.Mts {
 			sb.WriteString(m.String())
 		}
-		return &Scan{Labels: sb.String()}, nil
+		return &Scan{ID: NewID(), Labels: sb.String()}, nil
 	case *syntax.PipelineExpr:
 		var current Operator
 		var root Operator
@@ -300,12 +333,12 @@ func build(expr syntax.Expr) (Operator, error) {
 		return root, nil
 	case *syntax.LineFilterExpr:
 		//return &Filter{op: concrete.Op, ty: concrete.Ty, match: concrete.Match}
-		return &Filter{Kind: "contains"}, nil
+		return &Filter{ID: NewID(), Kind: "contains"}, nil
 	case *syntax.LabelFilterExpr:
-		return &Filter{Kind: "label"}, nil
+		return &Filter{ID: NewID(), Kind: "label"}, nil
 	case *syntax.LabelParserExpr:
 		// TODO: Not sure this is really a map operation
-		return &Map{Kind: "parser"}, nil
+		return &Map{ID: NewID(), Kind: "parser"}, nil
 	case *syntax.BinOpExpr:
 		lhs, err := build(concrete.SampleExpr)
 		if err != nil {
@@ -317,7 +350,7 @@ func build(expr syntax.Expr) (Operator, error) {
 			return nil, err
 		}
 
-		return &Binary{Kind: concrete.Op, lhs: lhs, rhs: rhs}, nil
+		return &Binary{ID: NewID(), Kind: concrete.Op, lhs: lhs, rhs: rhs}, nil
 	default:
 		return nil, fmt.Errorf("unsupported: %T(%s)", expr, expr)
 	}
