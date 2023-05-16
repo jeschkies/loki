@@ -3,6 +3,7 @@ package logicalplan
 import (
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 
 	"github.com/google/uuid"
@@ -74,7 +75,8 @@ func (g *Graphviz) visitMap(m *Map) {
 }
 
 func (g *Graphviz) visitScan(s *Scan) {
-	g.writer.WriteString(fmt.Sprintf(`"%s" [label="Scan\nLabels:..."];`, s.GetID()))
+	labels := strconv.Quote(s.Labels())
+	g.writer.WriteString(fmt.Sprintf(`"%s" [label="Scan\nLabels: %s"];`, s.GetID(), labels[1:len(labels)-1]))
 	g.writer.WriteString("\n")
 	if s.Child() != nil {
 		g.writer.WriteString(fmt.Sprintf(`"%s" -> "%s";`, s.Child().GetID(), s.GetID()))
@@ -237,7 +239,7 @@ func (b *Binary) SetChild(o Operator) {
 
 type Scan struct {
 	ID
-	Labels string
+	Matchers []*labels.Matcher
 }
 
 func (s *Scan) Child() Operator {
@@ -247,7 +249,20 @@ func (s *Scan) Child() Operator {
 func (s *Scan) SetChild(_ Operator) {}
 
 func (s *Scan) String() string {
-	return fmt.Sprintf("Scan(labels=%s)", s.Labels)
+	return fmt.Sprintf("Scan(labels=%s)", s.Labels())
+}
+
+func (s *Scan) Labels() string {
+	var sb strings.Builder
+	sb.WriteString("{")
+	for i, m := range s.Matchers {
+		sb.WriteString(m.String())
+		if i+1 != len(s.Matchers) {
+			sb.WriteString(", ")
+		}
+	}
+	sb.WriteString("}")
+	return sb.String()
 }
 
 func (s *Scan) Accept(v Visitor) {
@@ -296,16 +311,12 @@ func build(expr syntax.Expr) (Operator, error) {
 		}
 		return &Aggregation{ID: NewID(), Details: details, Parent: Parent{child}}, nil
 	case *syntax.LogRange:
-		var sb strings.Builder
-		for _, m := range concrete.Left.Matchers() {
-			sb.WriteString(m.String())
-		}
 
 		s, err := build(concrete.Left)
 		if err != nil {
 			return nil, err
 		}
-		scan := &Scan{ID: NewID(), Labels: sb.String()}
+		scan := &Scan{ID: NewID(), Matchers: concrete.Left.Matchers()}
 
 		if s == nil {
 			return scan, nil
@@ -324,11 +335,7 @@ func build(expr syntax.Expr) (Operator, error) {
 		leaf.SetChild(scan)
 		return s, nil
 	case *syntax.MatchersExpr:
-		var sb strings.Builder
-		for _, m := range concrete.Mts {
-			sb.WriteString(m.String())
-		}
-		return &Scan{ID: NewID(), Labels: sb.String()}, nil
+		return &Scan{ID: NewID(), Matchers: concrete.Mts}, nil
 	case *syntax.PipelineExpr:
 		var current Operator
 		var root Operator
