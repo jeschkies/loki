@@ -1,4 +1,4 @@
-package logicalplan
+package logical
 
 import (
 	"fmt"
@@ -12,7 +12,7 @@ func TestBuildPlan(t *testing.T) {
 	q := `sum(rate({app="foo", level="warn"}[1m])) / sum(rate({app="foo", level="error"} | logfmt [1m]))`
 	//q := `sum(rate({app="foo", level="warn"}[1m]))`
 
-	plan, err := Build(q)
+	plan, err := NewPlan(q)
 	require.NoError(t, err)
 	require.NotNil(t, plan)
 	fmt.Println(plan.String())
