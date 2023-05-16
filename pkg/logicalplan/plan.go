@@ -5,6 +5,7 @@ import (
 	"io"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/prometheus/prometheus/model/labels"
@@ -35,7 +36,7 @@ type Graphviz struct {
 }
 
 func (g *Graphviz) visitAggregation(a *Aggregation) {
-	g.writer.WriteString(fmt.Sprintf(`"%s" [label="Aggregation:%s"];`, a.GetID(), a.Details.Name()))
+	g.writer.WriteString(fmt.Sprintf(`"%s" [label="Aggregation:%s\n%s"];`, a.GetID(), a.Details.Name(), a.Details.Parameters()))
 	g.writer.WriteString("\n")
 	if a.Child() != nil {
 		g.writer.WriteString(fmt.Sprintf(`"%s" -> "%s";`, a.Child().GetID(), a.GetID()))
@@ -126,6 +127,7 @@ func (p *Parent) SetChild(o Operator) {
 
 type AggregationDetails interface {
 	Name() string
+	Parameters() string
 }
 
 type Aggregation struct {
@@ -156,12 +158,21 @@ func (s *Sum) Name() string {
 	return "sum"
 }
 
+func (s *Sum) Parameters() string {
+	return ""
+}
+
 type Rate struct {
 	ID
+	Interval time.Duration
 }
 
 func (s *Rate) Name() string {
 	return "rate"
+}
+
+func (s *Rate) Parameters() string {
+	return fmt.Sprintf("interval:%s", s.Interval)
 }
 
 type Filter struct {
@@ -299,15 +310,13 @@ func build(expr syntax.Expr) (Operator, error) {
 		}
 		return &Aggregation{ID: NewID(), Details: details, Parent: Parent{p}}, nil
 	case *syntax.RangeAggregationExpr:
-		// TODO: add range interval
-		// concrete.Left.Interval
 		child, err := build(concrete.Left)
 		if err != nil {
 			return nil, err
 		}
 		var details AggregationDetails
 		if concrete.Operation == syntax.OpRangeTypeRate {
-			details = &Rate{}
+			details = &Rate{Interval: concrete.Left.Interval}
 		}
 		return &Aggregation{ID: NewID(), Details: details, Parent: Parent{child}}, nil
 	case *syntax.LogRange:
