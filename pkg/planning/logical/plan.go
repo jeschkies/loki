@@ -28,6 +28,13 @@ func (p *Plan) String() string {
 	return p.Root.String()
 }
 
+// Leafs returns all leaf nodes.
+func (p *Plan) Leafs() []Operator {
+	visitor := &LeafAccumulator{}
+	p.Root.Accept(visitor)
+	return visitor.Leafs
+}
+
 // Graphviz writes the logical plan in dot language.
 // TODO: Define iteration pattern.
 func (p *Plan) Graphviz(w io.StringWriter) {
