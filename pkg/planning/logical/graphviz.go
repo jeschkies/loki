@@ -33,7 +33,11 @@ func (g *Graphviz) visitBinary(b *Binary) {
 }
 
 func (g *Graphviz) visitFilter(f *Filter) {
-	g.writer.WriteString(fmt.Sprintf(`"%s" [label="Filter:%s"];`, f.GetID(), f.Kind))
+	details := ""
+	if f.Kind == "line" {
+		details = fmt.Sprintf(`%s\"%s\"`, f.ty, f.match)
+	}
+	g.writer.WriteString(fmt.Sprintf(`"%s" [label="Filter:%s\n%s"];`, f.GetID(), f.Kind, details))
 	g.writer.WriteString("\n")
 	if f.Child() != nil {
 		g.writer.WriteString(fmt.Sprintf(`"%s" -> "%s";`, f.Child().GetID(), f.GetID()))

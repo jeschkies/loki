@@ -22,6 +22,7 @@ type Operator interface {
 	SetChild(Operator)
 	String() string
 	Accept(Visitor)
+	Leaf() Operator
 }
 
 func (p *Plan) String() string {
@@ -57,6 +58,16 @@ type Visitor interface {
 
 type Parent struct {
 	child Operator
+}
+
+func (p *Parent) Leaf() Operator {
+	// TODO: ignoring parent itself for now
+	c := p.child
+	if c == nil {
+		return nil
+	}
+
+	return c.Leaf()
 }
 
 type ID struct {
@@ -138,6 +149,10 @@ type Filter struct {
 	Parent
 }
 
+func NewFilter(id ID, kind string, expr *syntax.LineFilterExpr) *Filter {
+	return &Filter{ID: id, Kind: kind, op: expr.Op, ty: expr.Ty, match: expr.Match}
+}
+
 func (f *Filter) String() string {
 	//return fmt.Sprintf("Filter(ty=%s, match='%s')", f.ty, f.match)
 	if f.child != nil {
@@ -198,6 +213,10 @@ func (b *Binary) Child() Operator {
 	return nil // TODO
 }
 
+func (b *Binary) Leaf() Operator {
+	return nil // TODO
+}
+
 func (b *Binary) SetChild(o Operator) {
 	// TODO
 }
@@ -212,6 +231,10 @@ func (s *Scan) Child() Operator {
 }
 
 func (s *Scan) SetChild(_ Operator) {}
+
+func (s *Scan) Leaf() Operator {
+	return nil
+}
 
 func (s *Scan) String() string {
 	return fmt.Sprintf("Scan(labels=%s)", s.Labels())
@@ -275,29 +298,7 @@ func build(expr syntax.Expr) (Operator, error) {
 		}
 		return &Aggregation{ID: NewID(), Details: details, Parent: Parent{child}}, nil
 	case *syntax.LogRange:
-
-		s, err := build(concrete.Left)
-		if err != nil {
-			return nil, err
-		}
-		scan := &Scan{ID: NewID(), Matchers: concrete.Left.Matchers()}
-
-		if s == nil {
-			return scan, nil
-		}
-
-		if concrete.Unwrap != nil {
-			//	&Map{ Kind: "unwrap" }
-		}
-
-		// Push scan to the bottom.
-		leaf := s
-		for leaf.Child() != nil {
-			leaf = leaf.Child()
-		}
-
-		leaf.SetChild(scan)
-		return s, nil
+		return build(concrete.Left)
 	case *syntax.MatchersExpr:
 		return &Scan{ID: NewID(), Matchers: concrete.Mts}, nil
 	case *syntax.PipelineExpr:
@@ -315,10 +316,22 @@ func build(expr syntax.Expr) (Operator, error) {
 			}
 			current = stage
 		}
+		scan := &Scan{ID: NewID(), Matchers: concrete.Left.Matchers()}
+
+		if root == nil {
+			return scan, nil
+		}
+
+		l := root.Leaf()
+		if l != nil {
+			l.SetChild(scan)
+		} else {
+			root.SetChild(scan)
+		}
+
 		return root, nil
 	case *syntax.LineFilterExpr:
-		//return &Filter{op: concrete.Op, ty: concrete.Ty, match: concrete.Match}
-		return &Filter{ID: NewID(), Kind: "contains"}, nil
+		return NewFilter(NewID(), "line", concrete), nil
 	case *syntax.LabelFilterExpr:
 		return &Filter{ID: NewID(), Kind: "label"}, nil
 	case *syntax.LabelParserExpr:
