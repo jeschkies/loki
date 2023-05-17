@@ -33,7 +33,6 @@ func TestPlanBuilding(t *testing.T) {
 			for _, o := range plan.Leafs() {
 				require.IsType(t, &Scan{}, o)
 			}
-			//fmt.Println(plan.String())
 		})
 	}
 

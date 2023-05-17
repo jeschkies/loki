@@ -3,6 +3,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 
 	"github.com/grafana/loki/pkg/planning/logical"
@@ -12,6 +13,10 @@ import (
 func main() {
 	query := os.Args[1]
 
-	p, _ := logical.NewPlan(query)
+	p, err := logical.NewPlan(query)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "could not build plan: %s", err)
+		os.Exit(1)
+	}
 	p.Graphviz(os.Stdout)
 }
