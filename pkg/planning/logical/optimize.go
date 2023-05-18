@@ -1,6 +1,10 @@
 package logical
 
-import "github.com/prometheus/prometheus/model/labels"
+import (
+	"github.com/prometheus/prometheus/model/labels"
+
+	"github.com/grafana/regexp/syntax"
+)
 
 // RegexOptimizer simplifies or even replaces regular expression filters.
 type RegexOptimizer struct{}
@@ -12,6 +16,20 @@ func (r *RegexOptimizer) visitScan(*Scan)               {}
 
 func (r *RegexOptimizer) visitFilter(f *Filter) {
 	if f.ty != labels.MatchRegexp && f.ty != labels.MatchNotRegexp {
+		return
+	}
+
+	reg, err := syntax.Parse(f.match, syntax.Perl)
+	if err != nil {
+		return
+	}
+	reg = reg.Simplify()
+
+	switch reg.Op {
+	case syntax.OpLiteral:
+		f.match = string(reg.Rune)
+		f.ty = labels.MatchEqual
+	default:
 		return
 	}
 

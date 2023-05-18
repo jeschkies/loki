@@ -18,5 +18,8 @@ func main() {
 		fmt.Fprintf(os.Stderr, "could not build plan: %s", err)
 		os.Exit(1)
 	}
+
+	p.Root.Accept(&logical.RegexOptimizer{})
+
 	p.Graphviz(os.Stdout)
 }
