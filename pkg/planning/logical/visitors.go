@@ -33,3 +33,16 @@ func (v *LeafAccumulator) visitScan(s *Scan) {
 		v.Leafs = append(v.Leafs, s)
 	}
 }
+
+type AggregationAccumulator struct {
+	aggregations []*Aggregation
+}
+
+func (*AggregationAccumulator) visitBinary(*Binary) {}
+func (*AggregationAccumulator) visitMap(*Map)       {}
+func (*AggregationAccumulator) visitScan(*Scan)     {}
+func (*AggregationAccumulator) visitFilter(*Filter) {}
+
+func (acc *AggregationAccumulator) visitAggregation(a *Aggregation) {
+	acc.aggregations = append(acc.aggregations, a)
+}

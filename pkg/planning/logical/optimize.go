@@ -9,10 +9,10 @@ import (
 // RegexOptimizer simplifies or even replaces regular expression filters.
 type RegexOptimizer struct{}
 
-func (r *RegexOptimizer) visitAggregation(*Aggregation) {}
-func (r *RegexOptimizer) visitBinary(*Binary)           {}
-func (r *RegexOptimizer) visitMap(*Map)                 {}
-func (r *RegexOptimizer) visitScan(*Scan)               {}
+func (*RegexOptimizer) visitAggregation(*Aggregation) {}
+func (*RegexOptimizer) visitBinary(*Binary)           {}
+func (*RegexOptimizer) visitMap(*Map)                 {}
+func (*RegexOptimizer) visitScan(*Scan)               {}
 
 func (r *RegexOptimizer) visitFilter(f *Filter) {
 	if f.ty != labels.MatchRegexp && f.ty != labels.MatchNotRegexp {
@@ -93,3 +93,16 @@ func simplify(reg *syntax.Regexp, isLabel bool) (Filterer, bool) {
 	return nil, false
 }
 */
+
+func ShardAggregations(p *Plan) *Plan {
+	// TODO: we might want to chains visitors insteadsee
+	// see https://www.lihaoyi.com/post/ZeroOverheadTreeProcessingwiththeVisitorPattern.html
+	v := &AggregationAccumulator{}
+	p.Root.Accept(v)  
+
+	for _, a := range v.aggregations {
+		// TODO: shard a
+		// sharded := &ShardedAggregation{}
+		p.Replace(a, a)
+	}
+}

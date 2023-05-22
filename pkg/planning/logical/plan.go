@@ -29,6 +29,10 @@ func (p *Plan) String() string {
 	return p.Root.String()
 }
 
+func (p *Plan) Replace(oldOperator, newOperator Operator) {
+	
+}
+
 // Leafs returns all leaf nodes.
 func (p *Plan) Leafs() []Operator {
 	visitor := &LeafAccumulator{}
@@ -48,6 +52,7 @@ func (p *Plan) Graphviz(w io.StringWriter) {
 	w.WriteString("}")
 }
 
+// Visitor see https://www.lihaoyi.com/post/ZeroOverheadTreeProcessingwiththeVisitorPattern.html
 type Visitor interface {
 	visitAggregation(*Aggregation)
 	visitBinary(*Binary)
