@@ -20,6 +20,7 @@ func main() {
 	}
 
 	p.Root.Accept(&logical.RegexOptimizer{})
+	p = logical.ShardAggregations(p, logical.ConstantShards(4))
 
 	p.Graphviz(os.Stdout)
 }

@@ -108,20 +108,20 @@ type ShardResolver interface {
 
 type ConstantShards int
 
-func (s ConstantShards) Shards(_ syntax.MatcherRange) (int, uint64, error) { return int(s), 0, nil }
+func (s ConstantShards) Shards(_ *syntax.MatcherRange) (int, uint64, error) { return int(s), 0, nil }
 
 func ShardAggregations(p *Plan, resolver ShardResolver) *Plan {
 	// TODO: we might want to chains visitors instead
 	// see https://www.lihaoyi.com/post/ZeroOverheadTreeProcessingwiththeVisitorPattern.html
-	v := &AggregationAccumulator{}
+	v := &AggregationAccumulator{kind: "sum"}
 	p.Root.Accept(v)
 
 	c := NewCoalescene()
+	shards, _, _ := resolver.Shards(nil)
 	// TODO: check for nested aggregations
 	for _, a := range v.aggregations {
-		shards, _, _ := resolver.Shards(nil)
 		for i := shards - 1; i >= 0; i-- {
-			c.shards = append(c.shards, a)
+			c.shards = append(c.shards, a.DeepClone())
 		}
 		p.Replace(a, c)
 	}

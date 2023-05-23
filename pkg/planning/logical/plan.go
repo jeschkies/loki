@@ -44,7 +44,18 @@ func (p *Plan) String() string {
 }
 
 func (p *Plan) Replace(oldOperator, newOperator Operator) {
+	current := p.Root
+	if current.GetID() == oldOperator.GetID() {
+		p.Root = newOperator
+	}
 
+	for current.Child() != nil {
+		if current.Child().GetID() == oldOperator.GetID() {
+			current.SetChild(newOperator)
+			return
+		}
+		current = current.Child()
+	}
 }
 
 // Leafs returns all leaf nodes.
@@ -184,6 +195,10 @@ func (c *Coalescence) String() string {
 
 func (c *Coalescence) Accept(v Visitor) {
 	v.visitCoalescence(c)
+
+	for _, s := range c.shards {
+		s.Accept(v)
+	}
 }
 
 func (c *Coalescence) Child() Operator {

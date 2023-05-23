@@ -43,8 +43,13 @@ func (v *LeafAccumulator) visitScan(s *Scan) {
 type AggregationAccumulator struct {
 	defaultVisitor
 	aggregations []*Aggregation
+	kind         string
 }
 
 func (acc *AggregationAccumulator) visitAggregation(a *Aggregation) {
+	if a.Details.Name() != acc.kind {
+		return
+	}
+
 	acc.aggregations = append(acc.aggregations, a)
 }
