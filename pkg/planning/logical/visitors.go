@@ -63,6 +63,7 @@ func (acc *AggregationAccumulator) visitAggregation(a *Aggregation) {
 	acc.aggregations = append(acc.aggregations, a)
 }
 
+// ScanUpdate applies the update function to each scane visited.
 type ScanUpdate struct {
 	defaultVisitor
 	apply func(*Scan)

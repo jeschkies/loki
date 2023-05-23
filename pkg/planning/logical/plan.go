@@ -20,6 +20,7 @@ type Operator interface {
 	GetID() string
 	Child() Operator
 	Accept(Visitor)
+	Append(Operator) // TODO: could be done via a visitor but depends on dispatching.
 
 	// DeepClone makes a copy of the Operator and all its children and
 	// updates their ids.
@@ -28,7 +29,6 @@ type Operator interface {
 
 	// TODO: these are only used to settng Scan.
 	SetChild(Operator)
-	Leaf() Operator
 }
 
 // Type checks
@@ -91,14 +91,12 @@ type Parent struct {
 	child Operator
 }
 
-func (p *Parent) Leaf() Operator {
-	// TODO: ignoring parent itself for now
-	c := p.child
-	if c == nil {
-		return nil
+func (p *Parent) Append(o Operator) {
+	if p.child == nil {
+		p.child = o
+	} else {
+		p.child.Append(o)
 	}
-
-	return c.Leaf()
 }
 
 func (p *Parent) Child() Operator {
@@ -197,9 +195,10 @@ func (c *Coalescence) SetChild(o Operator) {
 	// TODO: remove this method. It's only used for scan.
 }
 
-func (c *Coalescence) Leaf() Operator {
-	// TODO: figure out what to return
-	return nil
+func (c *Coalescence) Append(o Operator) {
+	for _, s := range c.shards {
+		s.Append(o)
+	}
 }
 
 func (c *Coalescence) DeepClone() Operator {
@@ -279,8 +278,13 @@ func (b *Binary) Child() Operator {
 	return nil // TODO
 }
 
-func (b *Binary) Leaf() Operator {
-	return nil // TODO
+func (b *Binary) Append(o Operator) {
+	if b.lhs != nil {
+		b.lhs.Append(o)
+	}
+	if b.rhs != nil {
+		b.rhs.Append(o)
+	}
 }
 
 func (b *Binary) SetChild(o Operator) {
@@ -308,8 +312,8 @@ func (s *Scan) Child() Operator {
 
 func (s *Scan) SetChild(_ Operator) {}
 
-func (s *Scan) Leaf() Operator {
-	return nil
+func (s *Scan) Append(Operator) {
+	// Scan has no children.
 }
 
 func (s *Scan) DeepClone() Operator {
@@ -408,12 +412,7 @@ func build(expr syntax.Expr) (Operator, error) {
 			return scan, nil
 		}
 
-		l := root.Leaf()
-		if l != nil {
-			l.SetChild(scan)
-		} else {
-			root.SetChild(scan)
-		}
+		root.Append(scan)
 
 		return root, nil
 	case *syntax.LineFilterExpr:
