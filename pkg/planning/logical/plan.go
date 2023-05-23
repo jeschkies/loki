@@ -322,9 +322,15 @@ func (b *Binary) DeepClone() Operator {
 	return &Binary{ID: NewID(), Kind: b.Kind, lhs: b.lhs.DeepClone(), rhs: b.rhs.DeepClone()}
 }
 
+type ShardAnnotation struct {
+	Shard int
+	Of    int
+}
+
 type Scan struct {
 	ID
 	Matchers []*labels.Matcher
+	shard    *ShardAnnotation
 }
 
 func (s *Scan) Child() Operator {
@@ -342,7 +348,12 @@ func (s *Scan) DeepClone() Operator {
 	for _, m := range s.Matchers {
 		matchers = append(matchers, labels.MustNewMatcher(m.Type, m.Name, m.Value))
 	}
-	return &Scan{ID: NewID(), Matchers: matchers}
+	cloned := &Scan{ID: NewID(), Matchers: matchers}
+	if s.shard != nil {
+		shard := *s.shard
+		cloned.shard = &shard
+	}
+	return cloned
 }
 
 func (s *Scan) String() string {

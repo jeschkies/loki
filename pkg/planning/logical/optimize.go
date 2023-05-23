@@ -121,7 +121,11 @@ func ShardAggregations(p *Plan, resolver ShardResolver) *Plan {
 	// TODO: check for nested aggregations
 	for _, a := range v.aggregations {
 		for i := shards - 1; i >= 0; i-- {
-			c.shards = append(c.shards, a.DeepClone())
+			updated := a.DeepClone()
+			updated.Accept(ScanUpdate{apply: func(s *Scan) {
+				s.shard = &ShardAnnotation{i, shards}
+			}})
+			c.shards = append(c.shards, updated)
 		}
 		p.Replace(a, c)
 	}

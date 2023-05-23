@@ -66,7 +66,11 @@ func (g *Graphviz) visitMap(m *Map) {
 
 func (g *Graphviz) visitScan(s *Scan) {
 	labels := strconv.Quote(s.Labels())
-	g.writer.WriteString(fmt.Sprintf(`"%s" [label="Scan\nLabels: %s"];`, s.GetID(), labels[1:len(labels)-1]))
+	g.writer.WriteString(fmt.Sprintf(`"%s" [label="Scan\nLabels: %s`, s.GetID(), labels[1:len(labels)-1]))
+	if s.shard != nil {
+		g.writer.WriteString(fmt.Sprintf("\nShard %d of %d", s.shard.Shard, s.shard.Of))
+	}
+	g.writer.WriteString(`"];`)
 	g.writer.WriteString("\n")
 	if s.Child() != nil {
 		g.writer.WriteString(fmt.Sprintf(`"%s" -> "%s";`, s.Child().GetID(), s.GetID()))
