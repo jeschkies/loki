@@ -79,12 +79,12 @@ func (p *Plan) Graphviz(w io.StringWriter) {
 
 // Visitor see https://www.lihaoyi.com/post/ZeroOverheadTreeProcessingwiththeVisitorPattern.html
 type Visitor interface {
-	visitAggregation(*Aggregation)
-	visitCoalescence(*Coalescence)
-	visitBinary(*Binary)
-	visitFilter(*Filter)
-	visitMap(*Map)
-	visitScan(*Scan)
+	VisitAggregation(*Aggregation)
+	VisitCoalescence(*Coalescence)
+	VisitBinary(*Binary)
+	VisitFilter(*Filter)
+	VisitMap(*Map)
+	VisitScan(*Scan)
 }
 
 type Parent struct {
@@ -135,7 +135,7 @@ type Aggregation struct {
 }
 
 func (a *Aggregation) Accept(v Visitor) {
-	v.visitAggregation(a)
+	v.VisitAggregation(a)
 	if a.Child() != nil {
 		a.Child().Accept(v)
 	}
@@ -180,7 +180,7 @@ func NewCoalescene() *Coalescence {
 }
 
 func (c *Coalescence) Accept(v Visitor) {
-	v.visitCoalescence(c)
+	v.VisitCoalescence(c)
 
 	for _, s := range c.shards {
 		s.Accept(v)
@@ -223,7 +223,7 @@ func NewFilter(id ID, kind string, expr *syntax.LineFilterExpr) *Filter {
 }
 
 func (f *Filter) Accept(v Visitor) {
-	v.visitFilter(f)
+	v.VisitFilter(f)
 	if f.Child() != nil {
 		f.Child().Accept(v)
 	}
@@ -247,7 +247,7 @@ type Map struct {
 }
 
 func (m *Map) Accept(v Visitor) {
-	v.visitMap(m)
+	v.VisitMap(m)
 	if m.Child() != nil {
 		m.Child().Accept(v)
 	}
@@ -265,7 +265,7 @@ type Binary struct {
 }
 
 func (b *Binary) Accept(v Visitor) {
-	v.visitBinary(b)
+	v.VisitBinary(b)
 	if b.lhs != nil {
 		b.lhs.Accept(v)
 	}
@@ -343,7 +343,7 @@ func (s *Scan) Labels() string {
 }
 
 func (s *Scan) Accept(v Visitor) {
-	v.visitScan(s)
+	v.VisitScan(s)
 	if s.Child() != nil {
 		s.Child().Accept(v)
 	}

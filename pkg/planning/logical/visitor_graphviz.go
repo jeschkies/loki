@@ -16,7 +16,7 @@ func NewGraphviz(w io.StringWriter) *Graphviz {
 
 var _ Visitor = &Graphviz{}
 
-func (g *Graphviz) visitAggregation(a *Aggregation) {
+func (g *Graphviz) VisitAggregation(a *Aggregation) {
 	g.WriteString(fmt.Sprintf(`"%s" [label="Aggregation:%s\n%s"];`, a.GetID(), a.Details.Name(), a.Details.Parameters()))
 	g.WriteString("\n")
 	if a.Child() != nil {
@@ -25,7 +25,7 @@ func (g *Graphviz) visitAggregation(a *Aggregation) {
 	}
 }
 
-func (g *Graphviz) visitCoalescence(c *Coalescence) {
+func (g *Graphviz) VisitCoalescence(c *Coalescence) {
 
 	g.WriteString(fmt.Sprintf(`"%s" [label="Coalescence"];`, c.ID))
 	// TODO: show only defaultMaxDepth = 4 nodes
@@ -35,7 +35,7 @@ func (g *Graphviz) visitCoalescence(c *Coalescence) {
 	}
 }
 
-func (g *Graphviz) visitBinary(b *Binary) {
+func (g *Graphviz) VisitBinary(b *Binary) {
 	g.WriteString(fmt.Sprintf(`"%s" [label="Binary:%s"];`, b.GetID(), b.Kind))
 	g.WriteString("\n")
 	if b.lhs != nil {
@@ -48,7 +48,7 @@ func (g *Graphviz) visitBinary(b *Binary) {
 	}
 }
 
-func (g *Graphviz) visitFilter(f *Filter) {
+func (g *Graphviz) VisitFilter(f *Filter) {
 	details := ""
 	if f.Kind == "line" {
 		details = fmt.Sprintf(`%s\"%s\"`, f.ty, f.match)
@@ -61,7 +61,7 @@ func (g *Graphviz) visitFilter(f *Filter) {
 	}
 }
 
-func (g *Graphviz) visitMap(m *Map) {
+func (g *Graphviz) VisitMap(m *Map) {
 	g.WriteString(fmt.Sprintf(`"%s" [label="Map:%s"];`, m.GetID(), m.Kind))
 	g.WriteString("\n")
 	if m.Child() != nil {
@@ -70,7 +70,7 @@ func (g *Graphviz) visitMap(m *Map) {
 	}
 }
 
-func (g *Graphviz) visitScan(s *Scan) {
+func (g *Graphviz) VisitScan(s *Scan) {
 	labels := strconv.Quote(s.Labels())
 	g.WriteString(fmt.Sprintf(`"%s" [label="Scan\nLabels: %s`, s.GetID(), labels[1:len(labels)-1]))
 	if s.shard != nil {

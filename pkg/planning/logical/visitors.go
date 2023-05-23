@@ -2,48 +2,48 @@ package logical
 
 type defaultVisitor struct{}
 
-func (defaultVisitor) visitAggregation(*Aggregation) {}
-func (defaultVisitor) visitBinary(*Binary)           {}
-func (defaultVisitor) visitCoalescence(*Coalescence) {}
-func (defaultVisitor) visitFilter(*Filter)           {}
-func (defaultVisitor) visitMap(*Map)                 {}
-func (defaultVisitor) visitScan(*Scan)               {}
+func (defaultVisitor) VisitAggregation(*Aggregation) {}
+func (defaultVisitor) VisitBinary(*Binary)           {}
+func (defaultVisitor) VisitCoalescence(*Coalescence) {}
+func (defaultVisitor) VisitFilter(*Filter)           {}
+func (defaultVisitor) VisitMap(*Map)                 {}
+func (defaultVisitor) VisitScan(*Scan)               {}
 
 type LeafAccumulator struct {
 	Leafs []Operator
 }
 
-func (v *LeafAccumulator) visitAggregation(a *Aggregation) {
+func (v *LeafAccumulator) VisitAggregation(a *Aggregation) {
 	if a.Child() == nil {
 		v.Leafs = append(v.Leafs, a)
 	}
 }
 
-func (v *LeafAccumulator) visitCoalescence(c *Coalescence) {
+func (v *LeafAccumulator) VisitCoalescence(c *Coalescence) {
 	if len(c.shards) == 0 {
 		v.Leafs = append(v.Leafs, c)
 	}
 }
 
-func (v *LeafAccumulator) visitBinary(b *Binary) {
+func (v *LeafAccumulator) VisitBinary(b *Binary) {
 	if b.lhs == nil && b.rhs == nil {
 		v.Leafs = append(v.Leafs, b)
 	}
 }
 
-func (v *LeafAccumulator) visitFilter(f *Filter) {
+func (v *LeafAccumulator) VisitFilter(f *Filter) {
 	if f.Child() == nil {
 		v.Leafs = append(v.Leafs, f)
 	}
 }
 
-func (v *LeafAccumulator) visitMap(m *Map) {
+func (v *LeafAccumulator) VisitMap(m *Map) {
 	if m.Child() == nil {
 		v.Leafs = append(v.Leafs, m)
 	}
 }
 
-func (v *LeafAccumulator) visitScan(s *Scan) {
+func (v *LeafAccumulator) VisitScan(s *Scan) {
 	if s.Child() == nil {
 		v.Leafs = append(v.Leafs, s)
 	}
@@ -55,7 +55,7 @@ type AggregationAccumulator struct {
 	kind         string
 }
 
-func (acc *AggregationAccumulator) visitAggregation(a *Aggregation) {
+func (acc *AggregationAccumulator) VisitAggregation(a *Aggregation) {
 	if a.Details.Name() != acc.kind {
 		return
 	}
@@ -69,6 +69,6 @@ type ScanUpdate struct {
 	apply func(*Scan)
 }
 
-func (update ScanUpdate) visitScan(scan *Scan) {
+func (update ScanUpdate) VisitScan(scan *Scan) {
 	update.apply(scan)
 }

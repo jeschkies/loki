@@ -15,7 +15,7 @@ func NewStringer(w io.StringWriter) *Stringer {
 	return &Stringer{StringWriter: w}
 }
 
-func (s *Stringer) visitAggregation(a *Aggregation) {
+func (s *Stringer) VisitAggregation(a *Aggregation) {
 	s.WriteString(fmt.Sprintf("Aggregation(kind=%s", a.Details.Name()))
 	if a.child != nil {
 		s.WriteString(", ")
@@ -24,16 +24,16 @@ func (s *Stringer) visitAggregation(a *Aggregation) {
 	s.WriteString(")")
 }
 
-func (s *Stringer) visitBinary(b *Binary) {
+func (s *Stringer) VisitBinary(b *Binary) {
 	s.WriteString(fmt.Sprintf("Binary(kind=%s, %s, %s)", b.Kind, b.lhs, b.rhs))
 }
 
-func (s *Stringer) visitCoalescence(*Coalescence) {
+func (s *Stringer) VisitCoalescence(*Coalescence) {
 	// TODO show children
 	s.WriteString(fmt.Sprintf("Coalescence(kind=??)"))
 }
 
-func (s *Stringer) visitFilter(f *Filter) {
+func (s *Stringer) VisitFilter(f *Filter) {
 	//return fmt.Sprintf("Filter(ty=%s, match='%s')", f.ty, f.match)
 	if f.child != nil {
 		s.WriteString(fmt.Sprintf("Filter(kind=%s, %s)", f.Kind, "???"))
@@ -41,13 +41,13 @@ func (s *Stringer) visitFilter(f *Filter) {
 	s.WriteString(fmt.Sprintf("Filter(kind=%s)", f.Kind))
 }
 
-func (s *Stringer) visitMap(m *Map) {
+func (s *Stringer) VisitMap(m *Map) {
 	if m.child != nil {
 		s.WriteString(fmt.Sprintf("Map(kind=%s, %s)", m.Kind, "???"))
 	}
 	s.WriteString(fmt.Sprintf("Map(kind=%s)", m.Kind))
 }
 
-func (s *Stringer) visitScan(scan *Scan) {
+func (s *Stringer) VisitScan(scan *Scan) {
 	s.WriteString(fmt.Sprintf("Scan(labels=%s)", scan.Labels()))
 }
