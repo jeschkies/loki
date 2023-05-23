@@ -19,7 +19,6 @@ type Plan struct {
 type Operator interface {
 	GetID() string
 	Child() Operator
-	String() string
 	Accept(Visitor)
 
 	// DeepClone makes a copy of the Operator and all its children and
@@ -40,7 +39,9 @@ var _ Operator = &Map{}
 var _ Operator = &Scan{}
 
 func (p *Plan) String() string {
-	return p.Root.String()
+	var w strings.Builder
+	p.Root.Accept(NewStringer(&w))
+	return w.String()
 }
 
 func (p *Plan) Replace(oldOperator, newOperator Operator) {
@@ -71,8 +72,7 @@ func (p *Plan) Graphviz(w io.StringWriter) {
 	w.WriteString(`digraph { node [shape=rect];rankdir="BT";`)
 	w.WriteString("\n")
 
-	visitor := &Graphviz{writer: w}
-	p.Root.Accept(visitor)
+	p.Root.Accept(NewGraphviz(w))
 
 	w.WriteString("}")
 }
@@ -136,13 +136,6 @@ type Aggregation struct {
 	Parent
 }
 
-func (a *Aggregation) String() string {
-	if a.child != nil {
-		return fmt.Sprintf("Aggregation(kind=%s, %s)", a.Details.Name(), a.child.String())
-	}
-	return fmt.Sprintf("Aggregation(kind=%s)", a.Details.Name())
-}
-
 func (a *Aggregation) Accept(v Visitor) {
 	v.visitAggregation(a)
 	if a.Child() != nil {
@@ -188,11 +181,6 @@ func NewCoalescene() *Coalescence {
 	return &Coalescence{ID: NewID()}
 }
 
-func (c *Coalescence) String() string {
-	// TODO show children
-	return fmt.Sprintf("Coalescence(kind=??)")
-}
-
 func (c *Coalescence) Accept(v Visitor) {
 	v.visitCoalescence(c)
 
@@ -235,14 +223,6 @@ func NewFilter(id ID, kind string, expr *syntax.LineFilterExpr) *Filter {
 	return &Filter{ID: id, Kind: kind, op: expr.Op, ty: expr.Ty, match: expr.Match}
 }
 
-func (f *Filter) String() string {
-	//return fmt.Sprintf("Filter(ty=%s, match='%s')", f.ty, f.match)
-	if f.child != nil {
-		return fmt.Sprintf("Filter(kind=%s, %s)", f.Kind, f.child.String())
-	}
-	return fmt.Sprintf("Filter(kind=%s)", f.Kind)
-}
-
 func (f *Filter) Accept(v Visitor) {
 	v.visitFilter(f)
 	if f.Child() != nil {
@@ -267,13 +247,6 @@ type Map struct {
 	Parent
 }
 
-func (m *Map) String() string {
-	if m.child != nil {
-		return fmt.Sprintf("Map(kind=%s, %s)", m.Kind, m.child)
-	}
-	return fmt.Sprintf("Map(kind=%s)", m.Kind)
-}
-
 func (m *Map) Accept(v Visitor) {
 	v.visitMap(m)
 	if m.Child() != nil {
@@ -290,10 +263,6 @@ type Binary struct {
 	Kind string
 	lhs  Operator
 	rhs  Operator
-}
-
-func (b *Binary) String() string {
-	return fmt.Sprintf("Binary(kind=%s, %s, %s)", b.Kind, b.lhs, b.rhs)
 }
 
 func (b *Binary) Accept(v Visitor) {
@@ -354,10 +323,6 @@ func (s *Scan) DeepClone() Operator {
 		cloned.shard = &shard
 	}
 	return cloned
-}
-
-func (s *Scan) String() string {
-	return fmt.Sprintf("Scan(labels=%s)", s.Labels())
 }
 
 func (s *Scan) Labels() string {

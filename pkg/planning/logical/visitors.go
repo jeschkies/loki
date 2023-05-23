@@ -1,5 +1,14 @@
 package logical
 
+type defaultVisitor struct{}
+
+func (defaultVisitor) visitAggregation(*Aggregation) {}
+func (defaultVisitor) visitBinary(*Binary)           {}
+func (defaultVisitor) visitCoalescence(*Coalescence) {}
+func (defaultVisitor) visitFilter(*Filter)           {}
+func (defaultVisitor) visitMap(*Map)                 {}
+func (defaultVisitor) visitScan(*Scan)               {}
+
 type LeafAccumulator struct {
 	Leafs []Operator
 }

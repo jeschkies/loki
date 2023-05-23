@@ -8,15 +8,6 @@ import (
 	"github.com/grafana/loki/pkg/logql/syntax"
 )
 
-type defaultVisitor struct{}
-
-func (defaultVisitor) visitAggregation(*Aggregation) {}
-func (defaultVisitor) visitBinary(*Binary)           {}
-func (defaultVisitor) visitCoalescence(*Coalescence) {}
-func (defaultVisitor) visitFilter(*Filter)           {}
-func (defaultVisitor) visitMap(*Map)                 {}
-func (defaultVisitor) visitScan(*Scan)               {}
-
 // RegexOptimizer simplifies or even replaces regular expression filters.
 type RegexOptimizer struct {
 	defaultVisitor
