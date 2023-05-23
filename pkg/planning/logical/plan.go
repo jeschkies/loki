@@ -22,24 +22,29 @@ type Operator interface {
 	String() string
 	Accept(Visitor)
 
+	// DeepClone makes a copy of the Operator and all its children and
+	// updates their ids.
+	// TODO: this could probably be handled by a visitor again.
+	DeepClone() Operator
+
 	// TODO: these are only used to settng Scan.
 	SetChild(Operator)
 	Leaf() Operator
 }
 
 // Type checks
-var  _ Operator = &Aggregation{}
-var  _ Operator = &Coalescence{}
-var  _ Operator = &Filter{}
-var  _ Operator = &Map{}
-var  _ Operator = &Scan{}
+var _ Operator = &Aggregation{}
+var _ Operator = &Coalescence{}
+var _ Operator = &Filter{}
+var _ Operator = &Map{}
+var _ Operator = &Scan{}
 
 func (p *Plan) String() string {
 	return p.Root.String()
 }
 
 func (p *Plan) Replace(oldOperator, newOperator Operator) {
-	
+
 }
 
 // Leafs returns all leaf nodes.
@@ -85,6 +90,18 @@ func (p *Parent) Leaf() Operator {
 	return c.Leaf()
 }
 
+func (p *Parent) Child() Operator {
+	return p.child
+}
+
+func (p *Parent) SetChild(o Operator) {
+	p.child = o
+}
+
+func (p *Parent) DeepClone() Parent {
+	return Parent{child: p.child.DeepClone()}
+}
+
 type ID struct {
 	uuid.UUID
 }
@@ -95,14 +112,6 @@ func NewID() ID {
 
 func (i ID) GetID() string {
 	return i.UUID.String()
-}
-
-func (p *Parent) Child() Operator {
-	return p.child
-}
-
-func (p *Parent) SetChild(o Operator) {
-	p.child = o
 }
 
 type AggregationDetails interface {
@@ -128,6 +137,10 @@ func (a *Aggregation) Accept(v Visitor) {
 	if a.Child() != nil {
 		a.Child().Accept(v)
 	}
+}
+
+func (a *Aggregation) DeepClone() Operator {
+	return &Aggregation{ID: NewID(), Details: a.Details, Parent: a.Parent.DeepClone()}
 }
 
 type Sum struct {
@@ -160,9 +173,13 @@ type Coalescence struct {
 	shards []Operator
 }
 
+func NewCoalescene() *Coalescence {
+	return &Coalescence{ID: NewID()}
+}
+
 func (c *Coalescence) String() string {
 	// TODO show children
-	return fmt.Sprintf("Coalescence(kind=??)" )
+	return fmt.Sprintf("Coalescence(kind=??)")
 }
 
 func (c *Coalescence) Accept(v Visitor) {
@@ -180,6 +197,14 @@ func (c *Coalescence) SetChild(o Operator) {
 func (c *Coalescence) Leaf() Operator {
 	// TODO: figure out what to return
 	return nil
+}
+
+func (c *Coalescence) DeepClone() Operator {
+	var shards []Operator
+	for _, s := range c.shards {
+		shards = append(shards, s.DeepClone())
+	}
+	return &Coalescence{ID: NewID(), shards: shards}
 }
 
 type Filter struct {
@@ -210,6 +235,17 @@ func (f *Filter) Accept(v Visitor) {
 	}
 }
 
+func (f *Filter) DeepClone() Operator {
+	return &Filter{
+		ID:     NewID(),
+		Kind:   f.Kind,
+		op:     f.op,
+		ty:     f.ty,
+		match:  f.match,
+		Parent: f.Parent.DeepClone(),
+	}
+}
+
 type Map struct {
 	ID
 	Kind string
@@ -228,6 +264,10 @@ func (m *Map) Accept(v Visitor) {
 	if m.Child() != nil {
 		m.Child().Accept(v)
 	}
+}
+
+func (m *Map) DeepClone() Operator {
+	return &Map{ID: NewID(), Kind: m.Kind, Parent: m.Parent.DeepClone()}
 }
 
 type Binary struct {
@@ -263,6 +303,10 @@ func (b *Binary) SetChild(o Operator) {
 	// TODO
 }
 
+func (b *Binary) DeepClone() Operator {
+	return &Binary{ID: NewID(), Kind: b.Kind, lhs: b.lhs.DeepClone(), rhs: b.rhs.DeepClone()}
+}
+
 type Scan struct {
 	ID
 	Matchers []*labels.Matcher
@@ -276,6 +320,14 @@ func (s *Scan) SetChild(_ Operator) {}
 
 func (s *Scan) Leaf() Operator {
 	return nil
+}
+
+func (s *Scan) DeepClone() Operator {
+	var matchers []*labels.Matcher
+	for _, m := range s.Matchers {
+		matchers = append(matchers, labels.MustNewMatcher(m.Type, m.Name, m.Value))
+	}
+	return &Scan{ID: NewID(), Matchers: matchers}
 }
 
 func (s *Scan) String() string {
@@ -317,7 +369,7 @@ func NewPlan(query string) (*Plan, error) {
 	return plan, nil
 }
 
-// TODO: use visitor to build the plan. See https://www.lihaoyi.com/post/ZeroOverheadTreeProcessingwiththeVisitorPattern.html#streaming-sources 
+// TODO: use visitor to build the plan. See https://www.lihaoyi.com/post/ZeroOverheadTreeProcessingwiththeVisitorPattern.html#streaming-sources
 func build(expr syntax.Expr) (Operator, error) {
 	switch concrete := expr.(type) {
 	case *syntax.VectorAggregationExpr:

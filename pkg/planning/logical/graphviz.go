@@ -21,7 +21,7 @@ func (g *Graphviz) visitAggregation(a *Aggregation) {
 
 func (g *Graphviz) visitCoalescence(c *Coalescence) {
 
-	g.writer.WriteString(fmt.Sprintf(`"%s" [label="Coalescence"];`))
+	g.writer.WriteString(fmt.Sprintf(`"%s" [label="Coalescence"];`, c.ID))
 	// TODO: show only defaultMaxDepth = 4 nodes
 	for _, s := range c.shards {
 		g.writer.WriteString(fmt.Sprintf(`"%s" -> "%s";`, s.GetID(), c.GetID()))

@@ -3,18 +3,22 @@ package logical
 import (
 	"github.com/prometheus/prometheus/model/labels"
 
-	"github.com/grafana/regexp/syntax"
+	regexp "github.com/grafana/regexp/syntax"
+
+	"github.com/grafana/loki/pkg/logql/syntax"
 )
 
-type defaultVisitor struct {}
+type defaultVisitor struct{}
+
 func (defaultVisitor) visitAggregation(*Aggregation) {}
-func (defaultVisitor) visitCoalescence(*Coalescence) {}
 func (defaultVisitor) visitBinary(*Binary)           {}
+func (defaultVisitor) visitCoalescence(*Coalescence) {}
+func (defaultVisitor) visitFilter(*Filter)           {}
 func (defaultVisitor) visitMap(*Map)                 {}
 func (defaultVisitor) visitScan(*Scan)               {}
 
 // RegexOptimizer simplifies or even replaces regular expression filters.
-type RegexOptimizer struct{
+type RegexOptimizer struct {
 	defaultVisitor
 }
 
@@ -23,14 +27,14 @@ func (r *RegexOptimizer) visitFilter(f *Filter) {
 		return
 	}
 
-	reg, err := syntax.Parse(f.match, syntax.Perl)
+	reg, err := regexp.Parse(f.match, regexp.Perl)
 	if err != nil {
 		return
 	}
 	reg = reg.Simplify()
 
 	switch reg.Op {
-	case syntax.OpLiteral:
+	case regexp.OpLiteral:
 		f.match = string(reg.Rune)
 		f.ty = labels.MatchEqual
 	default:
@@ -98,15 +102,28 @@ func simplify(reg *syntax.Regexp, isLabel bool) (Filterer, bool) {
 }
 */
 
-func ShardAggregations(p *Plan) *Plan {
-	// TODO: we might want to chains visitors insteadsee
+type ShardResolver interface {
+	Shards(matchers *syntax.MatcherRange) (int, uint64, error)
+}
+
+type ConstantShards int
+
+func (s ConstantShards) Shards(_ syntax.MatcherRange) (int, uint64, error) { return int(s), 0, nil }
+
+func ShardAggregations(p *Plan, resolver ShardResolver) *Plan {
+	// TODO: we might want to chains visitors instead
 	// see https://www.lihaoyi.com/post/ZeroOverheadTreeProcessingwiththeVisitorPattern.html
 	v := &AggregationAccumulator{}
-	p.Root.Accept(v)  
+	p.Root.Accept(v)
 
+	c := NewCoalescene()
+	// TODO: check for nested aggregations
 	for _, a := range v.aggregations {
-		// TODO: shard a
-		// sharded := &ShardedAggregation{}
-		p.Replace(a, a)
+		shards, _, _ := resolver.Shards(nil)
+		for i := shards - 1; i >= 0; i-- {
+			c.shards = append(c.shards, a)
+		}
+		p.Replace(a, c)
 	}
+	return p
 }
