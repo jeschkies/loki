@@ -19,6 +19,16 @@ func (g *Graphviz) visitAggregation(a *Aggregation) {
 	}
 }
 
+func (g *Graphviz) visitCoalescence(c *Coalescence) {
+
+	g.writer.WriteString(fmt.Sprintf(`"%s" [label="Coalescence"];`))
+	// TODO: show only defaultMaxDepth = 4 nodes
+	for _, s := range c.shards {
+		g.writer.WriteString(fmt.Sprintf(`"%s" -> "%s";`, s.GetID(), c.GetID()))
+		g.writer.WriteString("\n")
+	}
+}
+
 func (g *Graphviz) visitBinary(b *Binary) {
 	g.writer.WriteString(fmt.Sprintf(`"%s" [label="Binary:%s"];`, b.GetID(), b.Kind))
 	g.writer.WriteString("\n")

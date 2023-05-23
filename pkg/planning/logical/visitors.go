@@ -10,6 +10,12 @@ func (v *LeafAccumulator) visitAggregation(a *Aggregation) {
 	}
 }
 
+func (v *LeafAccumulator) visitCoalescence(c *Coalescence) {
+	if len(c.shards) == 0 {
+		v.Leafs = append(v.Leafs, c)
+	}
+}
+
 func (v *LeafAccumulator) visitBinary(b *Binary) {
 	if b.lhs == nil && b.rhs == nil {
 		v.Leafs = append(v.Leafs, b)
@@ -35,13 +41,9 @@ func (v *LeafAccumulator) visitScan(s *Scan) {
 }
 
 type AggregationAccumulator struct {
+	defaultVisitor
 	aggregations []*Aggregation
 }
-
-func (*AggregationAccumulator) visitBinary(*Binary) {}
-func (*AggregationAccumulator) visitMap(*Map)       {}
-func (*AggregationAccumulator) visitScan(*Scan)     {}
-func (*AggregationAccumulator) visitFilter(*Filter) {}
 
 func (acc *AggregationAccumulator) visitAggregation(a *Aggregation) {
 	acc.aggregations = append(acc.aggregations, a)

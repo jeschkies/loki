@@ -19,11 +19,20 @@ type Plan struct {
 type Operator interface {
 	GetID() string
 	Child() Operator
-	SetChild(Operator)
 	String() string
 	Accept(Visitor)
+
+	// TODO: these are only used to settng Scan.
+	SetChild(Operator)
 	Leaf() Operator
 }
+
+// Type checks
+var  _ Operator = &Aggregation{}
+var  _ Operator = &Coalescence{}
+var  _ Operator = &Filter{}
+var  _ Operator = &Map{}
+var  _ Operator = &Scan{}
 
 func (p *Plan) String() string {
 	return p.Root.String()
@@ -55,6 +64,7 @@ func (p *Plan) Graphviz(w io.StringWriter) {
 // Visitor see https://www.lihaoyi.com/post/ZeroOverheadTreeProcessingwiththeVisitorPattern.html
 type Visitor interface {
 	visitAggregation(*Aggregation)
+	visitCoalescence(*Coalescence)
 	visitBinary(*Binary)
 	visitFilter(*Filter)
 	visitMap(*Map)
@@ -143,6 +153,33 @@ func (s *Rate) Name() string {
 
 func (s *Rate) Parameters() string {
 	return fmt.Sprintf("interval:%s", s.Interval)
+}
+
+type Coalescence struct {
+	ID
+	shards []Operator
+}
+
+func (c *Coalescence) String() string {
+	// TODO show children
+	return fmt.Sprintf("Coalescence(kind=??)" )
+}
+
+func (c *Coalescence) Accept(v Visitor) {
+	v.visitCoalescence(c)
+}
+
+func (c *Coalescence) Child() Operator {
+	return nil // TODO: we need Children instead of child
+}
+
+func (c *Coalescence) SetChild(o Operator) {
+	// TODO: remove this method. It's only used for scan.
+}
+
+func (c *Coalescence) Leaf() Operator {
+	// TODO: figure out what to return
+	return nil
 }
 
 type Filter struct {
@@ -280,6 +317,7 @@ func NewPlan(query string) (*Plan, error) {
 	return plan, nil
 }
 
+// TODO: use visitor to build the plan. See https://www.lihaoyi.com/post/ZeroOverheadTreeProcessingwiththeVisitorPattern.html#streaming-sources 
 func build(expr syntax.Expr) (Operator, error) {
 	switch concrete := expr.(type) {
 	case *syntax.VectorAggregationExpr:

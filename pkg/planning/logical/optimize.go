@@ -6,13 +6,17 @@ import (
 	"github.com/grafana/regexp/syntax"
 )
 
-// RegexOptimizer simplifies or even replaces regular expression filters.
-type RegexOptimizer struct{}
+type defaultVisitor struct {}
+func (defaultVisitor) visitAggregation(*Aggregation) {}
+func (defaultVisitor) visitCoalescence(*Coalescence) {}
+func (defaultVisitor) visitBinary(*Binary)           {}
+func (defaultVisitor) visitMap(*Map)                 {}
+func (defaultVisitor) visitScan(*Scan)               {}
 
-func (*RegexOptimizer) visitAggregation(*Aggregation) {}
-func (*RegexOptimizer) visitBinary(*Binary)           {}
-func (*RegexOptimizer) visitMap(*Map)                 {}
-func (*RegexOptimizer) visitScan(*Scan)               {}
+// RegexOptimizer simplifies or even replaces regular expression filters.
+type RegexOptimizer struct{
+	defaultVisitor
+}
 
 func (r *RegexOptimizer) visitFilter(f *Filter) {
 	if f.ty != labels.MatchRegexp && f.ty != labels.MatchNotRegexp {
