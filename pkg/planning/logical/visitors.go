@@ -14,40 +14,51 @@ type LeafAccumulator struct {}
 var _ Visitor[[]Operator] = &LeafAccumulator{}
 
 func (v *LeafAccumulator) VisitAggregation(a *Aggregation) []Operator {
-	if a.Child() == nil {
-		v.Leafs = append(v.Leafs, a)
+	if a.Child() != nil {
+		return dispatch[[]Operator](a.Child(), v)
 	}
+	return []Operator{a}
 
 }
 
-func (v *LeafAccumulator) VisitCoalescence(c *Coalescence) {
+func (v *LeafAccumulator) VisitCoalescence(c *Coalescence) []Operator {
 	if len(c.shards) == 0 {
-		v.Leafs = append(v.Leafs, c)
+		return []Operator{c}
 	}
+
+	var leafs []Operator
+	for _, s := range c.shards {
+		leafs = append(leafs, dispatch[[]Operator](s, v)...)	
+	}
+	return leafs
 }
 
-func (v *LeafAccumulator) VisitBinary(b *Binary) {
+func (v *LeafAccumulator) VisitBinary(b *Binary) []Operator {
 	if b.lhs == nil && b.rhs == nil {
-		v.Leafs = append(v.Leafs, b)
+		return []Operator{b}
 	}
+
+	leafs := dispatch[[]Operator](b.lhs, v)
+	leafs = append(leafs, dispatch[[]Operator](b.rhs, v)...)	
+	return leafs
 }
 
-func (v *LeafAccumulator) VisitFilter(f *Filter) {
-	if f.Child() == nil {
-		v.Leafs = append(v.Leafs, f)
+func (v *LeafAccumulator) VisitFilter(f *Filter) []Operator {
+	if f.Child() != nil {
+		return dispatch[[]Operator](f.Child(), v)
 	}
+	return []Operator{f}
 }
 
-func (v *LeafAccumulator) VisitMap(m *Map) {
-	if m.Child() == nil {
-		v.Leafs = append(v.Leafs, m)
+func (v *LeafAccumulator) VisitMap(m *Map) []Operator {
+	if m.Child() != nil {
+		return dispatch[[]Operator](m.Child(), v)
 	}
+	return []Operator{m}
 }
 
-func (v *LeafAccumulator) VisitScan(s *Scan) {
-	if s.Child() == nil {
-		v.Leafs = append(v.Leafs, s)
-	}
+func (v *LeafAccumulator) VisitScan(s *Scan) []Operator {
+	return []Operator{s}
 }
 
 type AggregationAccumulator struct {
