@@ -80,13 +80,24 @@ func (v *AggregationAccumulator)VisitCoalescence(c *Coalescence) []*Aggregation 
 	return acc
 }
 
-func (v *AggregationAccumulator)VisitBinary(*Binary) []*Aggregation {
-
+func (v *AggregationAccumulator)VisitBinary(b *Binary) []*Aggregation {
+	var acc []*Aggregation
+	if  
 }
 
-func (v *AggregationAccumulator)VisitFilter(*Filter) T
+func (v *AggregationAccumulator)VisitFilter(f *Filter) []*Aggregation {
+	if f.Child() != nil {
+		return Dispatch[[]*Aggregation](f.Child(), v)
+	}
+	return nil
+}
 
-func (v *AggregationAccumulator)VisitMap(*Map) T
+func (v *AggregationAccumulator)VisitMap(m *Map) []*Aggregation {
+	if m.Child() != nil {
+		return Dispatch[[]*Aggregation](m.Child(), v)
+	}
+	return nil
+}
 
 func (v *AggregationAccumulator)VisitScan(*Scan) []*Aggregation {
 	return nil

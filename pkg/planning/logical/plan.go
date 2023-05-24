@@ -38,7 +38,7 @@ func Dispatch[T any | ~string](o Operator, v Visitor[T]) T {
 		return v.VisitCoalescence(concrete)
 	case *Filter:
 		return v.VisitFilter(concrete)
-	case *Map:
+	ase *Map:
 		return v.VisitMap(concrete)
 	case *Scan:
 		return v.VisitScan(concrete)
