@@ -7,6 +7,6 @@ import (
 )
 
 func TestBuilder(t *testing.T) {
-	var b logical.Visitor = &Builder{}
+	var b logical.Visitor[StepEvaluator] = &Builder{}
 	b.VisitAggregation(nil)
 }

@@ -30,7 +30,7 @@ type Operator interface {
 	SetChild(Operator)
 }
 
-func dispatch[T any | ~string](o Operator, v Visitor[T]) T {
+func Dispatch[T any | ~string](o Operator, v Visitor[T]) T {
 	switch concrete := o.(type) {
 	case *Aggregation:
 		return v.VisitAggregation(concrete)
@@ -56,7 +56,7 @@ var _ Operator = &Map{}
 var _ Operator = &Scan{}
 
 func (p *Plan) String() string {
-	return dispatch[string](p.Root, NewStringer())
+	return Dispatch[string](p.Root, NewStringer())
 }
 
 func (p *Plan) Replace(oldOperator, newOperator Operator) {
@@ -76,7 +76,7 @@ func (p *Plan) Replace(oldOperator, newOperator Operator) {
 
 // Leafs returns all leaf nodes.
 func (p *Plan) Leafs() []Operator {
-	return dispatch[[]Operator](p.Root, &LeafAccumulator{})
+	return Dispatch[[]Operator](p.Root, &LeafAccumulator{})
 }
 
 // Graphviz writes the logical plan in dot language.

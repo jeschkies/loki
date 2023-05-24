@@ -1,21 +1,12 @@
 package logical
 
-type defaultVisitor struct{}
-
-func (defaultVisitor) VisitAggregation(*Aggregation) {}
-func (defaultVisitor) VisitBinary(*Binary)           {}
-func (defaultVisitor) VisitCoalescence(*Coalescence) {}
-func (defaultVisitor) VisitFilter(*Filter)           {}
-func (defaultVisitor) VisitMap(*Map)                 {}
-func (defaultVisitor) VisitScan(*Scan)               {}
-
 type LeafAccumulator struct {}
 
 var _ Visitor[[]Operator] = &LeafAccumulator{}
 
 func (v *LeafAccumulator) VisitAggregation(a *Aggregation) []Operator {
 	if a.Child() != nil {
-		return dispatch[[]Operator](a.Child(), v)
+		return Dispatch[[]Operator](a.Child(), v)
 	}
 	return []Operator{a}
 
@@ -28,7 +19,7 @@ func (v *LeafAccumulator) VisitCoalescence(c *Coalescence) []Operator {
 
 	var leafs []Operator
 	for _, s := range c.shards {
-		leafs = append(leafs, dispatch[[]Operator](s, v)...)	
+		leafs = append(leafs, Dispatch[[]Operator](s, v)...)	
 	}
 	return leafs
 }
@@ -38,21 +29,21 @@ func (v *LeafAccumulator) VisitBinary(b *Binary) []Operator {
 		return []Operator{b}
 	}
 
-	leafs := dispatch[[]Operator](b.lhs, v)
-	leafs = append(leafs, dispatch[[]Operator](b.rhs, v)...)	
+	leafs := Dispatch[[]Operator](b.lhs, v)
+	leafs = append(leafs, Dispatch[[]Operator](b.rhs, v)...)	
 	return leafs
 }
 
 func (v *LeafAccumulator) VisitFilter(f *Filter) []Operator {
 	if f.Child() != nil {
-		return dispatch[[]Operator](f.Child(), v)
+		return Dispatch[[]Operator](f.Child(), v)
 	}
 	return []Operator{f}
 }
 
 func (v *LeafAccumulator) VisitMap(m *Map) []Operator {
 	if m.Child() != nil {
-		return dispatch[[]Operator](m.Child(), v)
+		return Dispatch[[]Operator](m.Child(), v)
 	}
 	return []Operator{m}
 }
@@ -62,17 +53,43 @@ func (v *LeafAccumulator) VisitScan(s *Scan) []Operator {
 }
 
 type AggregationAccumulator struct {
-	defaultVisitor
-	aggregations []*Aggregation
 	kind         string
 }
 
-func (acc *AggregationAccumulator) VisitAggregation(a *Aggregation) {
-	if a.Details.Name() != acc.kind {
-		return
+var _ Visitor[[]*Aggregation] = &AggregationAccumulator{}
+
+func (v *AggregationAccumulator) VisitAggregation(a *Aggregation) []*Aggregation {
+	if a.Details.Name() != v.kind {
+		return nil
+	}
+	acc := []*Aggregation{a}
+
+	if a.Child() != nil {
+		acc = append(acc, Dispatch[[]*Aggregation](a.Child(), v)...)
 	}
 
-	acc.aggregations = append(acc.aggregations, a)
+	return acc
+}
+
+func (v *AggregationAccumulator)VisitCoalescence(c *Coalescence) []*Aggregation {
+	var acc []*Aggregation
+	for _, s := range c.shards {
+		acc = append(acc, Dispatch[[]*Aggregation](s, v)...)
+	}
+
+	return acc
+}
+
+func (v *AggregationAccumulator)VisitBinary(*Binary) []*Aggregation {
+
+}
+
+func (v *AggregationAccumulator)VisitFilter(*Filter) T
+
+func (v *AggregationAccumulator)VisitMap(*Map) T
+
+func (v *AggregationAccumulator)VisitScan(*Scan) []*Aggregation {
+	return nil
 }
 
 // ScanUpdate applies the update function to each scane visited.
