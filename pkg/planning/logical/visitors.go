@@ -9,14 +9,15 @@ func (defaultVisitor) VisitFilter(*Filter)           {}
 func (defaultVisitor) VisitMap(*Map)                 {}
 func (defaultVisitor) VisitScan(*Scan)               {}
 
-type LeafAccumulator struct {
-	Leafs []Operator
-}
+type LeafAccumulator struct {}
 
-func (v *LeafAccumulator) VisitAggregation(a *Aggregation) {
+var _ Visitor[[]Operator] = &LeafAccumulator{}
+
+func (v *LeafAccumulator) VisitAggregation(a *Aggregation) []Operator {
 	if a.Child() == nil {
 		v.Leafs = append(v.Leafs, a)
 	}
+
 }
 
 func (v *LeafAccumulator) VisitCoalescence(c *Coalescence) {

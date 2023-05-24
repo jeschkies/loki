@@ -19,7 +19,6 @@ type Plan struct {
 type Operator interface {
 	GetID() string
 	Child() Operator
-	Accept(Visitor)
 	Append(Operator) // TODO: could be done via a visitor but depends on dispatching.
 
 	// DeepClone makes a copy of the Operator and all its children and
@@ -31,6 +30,24 @@ type Operator interface {
 	SetChild(Operator)
 }
 
+func dispatch[T any | ~string](o Operator, v Visitor[T]) T {
+	switch concrete := o.(type) {
+	case *Aggregation:
+		return v.VisitAggregation(concrete)
+	case *Coalescence:
+		return v.VisitCoalescence(concrete)
+	case *Filter:
+		return v.VisitFilter(concrete)
+	case *Map:
+		return v.VisitMap(concrete)
+	case *Scan:
+		return v.VisitScan(concrete)
+	}
+	// Return empty T
+	var r T
+	return r
+}
+
 // Type checks
 var _ Operator = &Aggregation{}
 var _ Operator = &Coalescence{}
@@ -39,9 +56,7 @@ var _ Operator = &Map{}
 var _ Operator = &Scan{}
 
 func (p *Plan) String() string {
-	var w strings.Builder
-	p.Root.Accept(NewStringer(&w))
-	return w.String()
+	return dispatch[string](p.Root, NewStringer())
 }
 
 func (p *Plan) Replace(oldOperator, newOperator Operator) {
@@ -61,9 +76,7 @@ func (p *Plan) Replace(oldOperator, newOperator Operator) {
 
 // Leafs returns all leaf nodes.
 func (p *Plan) Leafs() []Operator {
-	visitor := &LeafAccumulator{}
-	p.Root.Accept(visitor)
-	return visitor.Leafs
+	return dispatch[[]Operator](p.Root, &LeafAccumulator{})
 }
 
 // Graphviz writes the logical plan in dot language.
@@ -78,13 +91,13 @@ func (p *Plan) Graphviz(w io.StringWriter) {
 }
 
 // Visitor see https://www.lihaoyi.com/post/ZeroOverheadTreeProcessingwiththeVisitorPattern.html
-type Visitor interface {
-	VisitAggregation(*Aggregation)
-	VisitCoalescence(*Coalescence)
-	VisitBinary(*Binary)
-	VisitFilter(*Filter)
-	VisitMap(*Map)
-	VisitScan(*Scan)
+type Visitor[T any] interface {
+	VisitAggregation(*Aggregation) T
+	VisitCoalescence(*Coalescence) T
+	VisitBinary(*Binary) T
+	VisitFilter(*Filter) T
+	VisitMap(*Map) T
+	VisitScan(*Scan) T
 }
 
 type Parent struct {
