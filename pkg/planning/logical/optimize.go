@@ -8,12 +8,54 @@ import (
 	"github.com/grafana/loki/pkg/logql/syntax"
 )
 
-// RegexOptimizer simplifies or even replaces regular expression filters.
-type RegexOptimizer struct {
-	defaultVisitor
+type unit struct{}
+
+type updateVisitor struct {
+	updateFilter func(*Filter)
+	updateScan   func(*Scan)
 }
 
-func (r *RegexOptimizer) visitFilter(f *Filter) {
+var _ Visitor[unit] = updateVisitor{}
+
+func (v updateVisitor) VisitAggregation(*Aggregation) unit {
+	return unit{}
+}
+
+func (v updateVisitor) VisitCoalescence(*Coalescence) unit {
+	return unit{}
+}
+
+func (v updateVisitor) VisitBinary(*Binary) unit {
+	return unit{}
+}
+
+func (v updateVisitor) VisitFilter(*Filter) unit {
+	return unit{}
+}
+
+func (v updateVisitor) VisitMap(*Map) unit {
+	return unit{}
+}
+
+func (v updateVisitor) VisitScan(*Scan) unit {
+	return unit{}
+}
+
+// RegexOptimizer simplifies or even replaces regular expression filters.
+type RegexOptimizer struct {
+	updateVisitor
+}
+
+var _ Visitor[unit] = &RegexOptimizer{}
+
+func NewRegexpOptimizer() *RegexOptimizer {
+	r := &RegexOptimizer{}
+	r.updateVisitor.updateFilter = r.optimize
+
+	return r
+}
+
+func (r *RegexOptimizer) optimize(f *Filter) {
 	if f.ty != labels.MatchRegexp && f.ty != labels.MatchNotRegexp {
 		return
 	}
@@ -114,9 +156,9 @@ func ShardAggregations(p *Plan, resolver ShardResolver) *Plan {
 	for _, a := range aggregations {
 		for i := shards - 1; i >= 0; i-- {
 			updated := a.DeepClone()
-			updated.Accept(ScanUpdate{apply: func(s *Scan) {
+			Dispatch[unit](updated, NewScanUpdate(func(s *Scan) {
 				s.shard = &ShardAnnotation{i, shards}
-			}})
+			}))
 			c.shards = append(c.shards, updated)
 		}
 		p.Replace(a, c)

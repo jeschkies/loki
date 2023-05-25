@@ -38,7 +38,7 @@ func Dispatch[T any | ~string](o Operator, v Visitor[T]) T {
 		return v.VisitCoalescence(concrete)
 	case *Filter:
 		return v.VisitFilter(concrete)
-	ase *Map:
+	case *Map:
 		return v.VisitMap(concrete)
 	case *Scan:
 		return v.VisitScan(concrete)
@@ -85,7 +85,7 @@ func (p *Plan) Graphviz(w io.StringWriter) {
 	w.WriteString(`digraph { node [shape=rect];rankdir="BT";`)
 	w.WriteString("\n")
 
-	p.Root.Accept(NewGraphviz(w))
+	w.WriteString(Dispatch[string](p.Root, NewGraphviz()))
 
 	w.WriteString("}")
 }
@@ -147,13 +147,6 @@ type Aggregation struct {
 	Parent
 }
 
-func (a *Aggregation) Accept(v Visitor) {
-	v.VisitAggregation(a)
-	if a.Child() != nil {
-		a.Child().Accept(v)
-	}
-}
-
 func (a *Aggregation) DeepClone() Operator {
 	return &Aggregation{ID: NewID(), Details: a.Details, Parent: a.Parent.DeepClone()}
 }
@@ -192,14 +185,6 @@ func NewCoalescene() *Coalescence {
 	return &Coalescence{ID: NewID()}
 }
 
-func (c *Coalescence) Accept(v Visitor) {
-	v.VisitCoalescence(c)
-
-	for _, s := range c.shards {
-		s.Accept(v)
-	}
-}
-
 func (c *Coalescence) Child() Operator {
 	return nil // TODO: we need Children instead of child
 }
@@ -235,13 +220,6 @@ func NewFilter(id ID, kind string, expr *syntax.LineFilterExpr) *Filter {
 	return &Filter{ID: id, Kind: kind, op: expr.Op, ty: expr.Ty, match: expr.Match}
 }
 
-func (f *Filter) Accept(v Visitor) {
-	v.VisitFilter(f)
-	if f.Child() != nil {
-		f.Child().Accept(v)
-	}
-}
-
 func (f *Filter) DeepClone() Operator {
 	return &Filter{
 		ID:     NewID(),
@@ -259,13 +237,6 @@ type Map struct {
 	Parent
 }
 
-func (m *Map) Accept(v Visitor) {
-	v.VisitMap(m)
-	if m.Child() != nil {
-		m.Child().Accept(v)
-	}
-}
-
 func (m *Map) DeepClone() Operator {
 	return &Map{ID: NewID(), Kind: m.Kind, Parent: m.Parent.DeepClone()}
 }
@@ -275,16 +246,6 @@ type Binary struct {
 	Kind string
 	lhs  Operator
 	rhs  Operator
-}
-
-func (b *Binary) Accept(v Visitor) {
-	v.VisitBinary(b)
-	if b.lhs != nil {
-		b.lhs.Accept(v)
-	}
-	if b.rhs != nil {
-		b.rhs.Accept(v)
-	}
 }
 
 func (b *Binary) Child() Operator {
@@ -353,13 +314,6 @@ func (s *Scan) Labels() string {
 	}
 	sb.WriteString("}")
 	return sb.String()
-}
-
-func (s *Scan) Accept(v Visitor) {
-	v.VisitScan(s)
-	if s.Child() != nil {
-		s.Child().Accept(v)
-	}
 }
 
 // NewPlan constructs a logical plan from the query or an error.

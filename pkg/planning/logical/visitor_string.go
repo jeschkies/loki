@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-type Stringer struct {}
+type Stringer struct{}
 
 var _ Visitor[string] = &Stringer{}
 

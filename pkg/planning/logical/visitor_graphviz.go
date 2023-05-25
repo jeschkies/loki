@@ -2,14 +2,13 @@ package logical
 
 import (
 	"fmt"
-	"io"
 	"strconv"
 	"strings"
 )
 
-type Graphviz struct {}
+type Graphviz struct{}
 
-func NewGraphviz(w io.StringWriter) *Graphviz {
+func NewGraphviz() *Graphviz {
 	return &Graphviz{}
 }
 
