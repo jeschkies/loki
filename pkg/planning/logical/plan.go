@@ -178,7 +178,7 @@ func (s *Rate) Parameters() string {
 
 type Coalescence struct {
 	ID
-	shards []Operator
+	Shards []Operator
 }
 
 func NewCoalescene() *Coalescence {
@@ -194,17 +194,17 @@ func (c *Coalescence) SetChild(o Operator) {
 }
 
 func (c *Coalescence) Append(o Operator) {
-	for _, s := range c.shards {
+	for _, s := range c.Shards {
 		s.Append(o)
 	}
 }
 
 func (c *Coalescence) DeepClone() Operator {
 	var shards []Operator
-	for _, s := range c.shards {
+	for _, s := range c.Shards {
 		shards = append(shards, s.DeepClone())
 	}
-	return &Coalescence{ID: NewID(), shards: shards}
+	return &Coalescence{ID: NewID(), Shards: shards}
 }
 
 type Filter struct {

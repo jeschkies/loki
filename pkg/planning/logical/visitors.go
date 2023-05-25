@@ -13,12 +13,12 @@ func (v *LeafAccumulator) VisitAggregation(a *Aggregation) []Operator {
 }
 
 func (v *LeafAccumulator) VisitCoalescence(c *Coalescence) []Operator {
-	if len(c.shards) == 0 {
+	if len(c.Shards) == 0 {
 		return []Operator{c}
 	}
 
 	var leafs []Operator
-	for _, s := range c.shards {
+	for _, s := range c.Shards {
 		leafs = append(leafs, Dispatch[[]Operator](s, v)...)
 	}
 	return leafs
@@ -73,7 +73,7 @@ func (v *AggregationAccumulator) VisitAggregation(a *Aggregation) []*Aggregation
 
 func (v *AggregationAccumulator) VisitCoalescence(c *Coalescence) []*Aggregation {
 	var acc []*Aggregation
-	for _, s := range c.shards {
+	for _, s := range c.Shards {
 		acc = append(acc, Dispatch[[]*Aggregation](s, v)...)
 	}
 

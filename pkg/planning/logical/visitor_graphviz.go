@@ -33,7 +33,7 @@ func (g *Graphviz) VisitCoalescence(c *Coalescence) string {
 
 	sb.WriteString(fmt.Sprintf(`"%s" [label="Coalescence"];`, c.ID))
 	// TODO: show only defaultMaxDepth = 4 nodes
-	for _, s := range c.shards {
+	for _, s := range c.Shards {
 		sb.WriteString(fmt.Sprintf(`"%s" -> "%s";`, s.GetID(), c.GetID()))
 		sb.WriteString("\n")
 

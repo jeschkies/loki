@@ -25,7 +25,7 @@ func (v updateVisitor) VisitAggregation(a *Aggregation) Unit {
 }
 
 func (v updateVisitor) VisitCoalescence(c *Coalescence) Unit {
-	for _, s := range c.shards {
+	for _, s := range c.Shards {
 		Dispatch[Unit](s, v)
 	}
 	return Unit{}
@@ -183,7 +183,7 @@ func ShardAggregations(p *Plan, resolver ShardResolver) *Plan {
 			Dispatch[Unit](updated, NewScanUpdate(func(s *Scan) {
 				s.shard = &ShardAnnotation{i, shards}
 			}))
-			c.shards = append(c.shards, updated)
+			c.Shards = append(c.Shards, updated)
 		}
 		p.Replace(a, c)
 	}
