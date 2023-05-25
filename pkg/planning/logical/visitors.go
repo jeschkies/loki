@@ -115,7 +115,7 @@ type ScanUpdate struct {
 	updateVisitor
 }
 
-var _ Visitor[unit] = &ScanUpdate{}
+var _ Visitor[Unit] = &ScanUpdate{}
 
 func NewScanUpdate(u func(*Scan)) *ScanUpdate {
 	s := &ScanUpdate{}

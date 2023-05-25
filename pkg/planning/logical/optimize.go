@@ -8,61 +8,61 @@ import (
 	"github.com/grafana/loki/pkg/logql/syntax"
 )
 
-type unit struct{}
+type Unit struct{}
 
 type updateVisitor struct {
 	updateFilter func(*Filter)
 	updateScan   func(*Scan)
 }
 
-var _ Visitor[unit] = updateVisitor{}
+var _ Visitor[Unit] = updateVisitor{}
 
-func (v updateVisitor) VisitAggregation(a *Aggregation) unit {
+func (v updateVisitor) VisitAggregation(a *Aggregation) Unit {
 	if a.Child() != nil {
-		Dispatch[unit](a.Child(), v)
+		Dispatch[Unit](a.Child(), v)
 	}
-	return unit{}
+	return Unit{}
 }
 
-func (v updateVisitor) VisitCoalescence(c *Coalescence) unit {
+func (v updateVisitor) VisitCoalescence(c *Coalescence) Unit {
 	for _, s := range c.shards {
-		Dispatch[unit](s, v)
+		Dispatch[Unit](s, v)
 	}
-	return unit{}
+	return Unit{}
 }
 
-func (v updateVisitor) VisitBinary(b *Binary) unit {
+func (v updateVisitor) VisitBinary(b *Binary) Unit {
 	if b.lhs != nil {
-		Dispatch[unit](b.lhs, v)
+		Dispatch[Unit](b.lhs, v)
 	}
 	if b.rhs != nil {
-		Dispatch[unit](b.rhs, v)
+		Dispatch[Unit](b.rhs, v)
 	}
-	return unit{}
+	return Unit{}
 }
 
-func (v updateVisitor) VisitFilter(f *Filter) unit {
+func (v updateVisitor) VisitFilter(f *Filter) Unit {
 	if v.updateFilter != nil {
 		v.updateFilter(f)
 	}
 	if f.Child() != nil {
-		Dispatch[unit](f.Child(), v)
+		Dispatch[Unit](f.Child(), v)
 	}
-	return unit{}
+	return Unit{}
 }
 
-func (v updateVisitor) VisitMap(m *Map) unit {
+func (v updateVisitor) VisitMap(m *Map) Unit {
 	if m.Child() != nil {
-		Dispatch[unit](m.Child(), v)
+		Dispatch[Unit](m.Child(), v)
 	}
-	return unit{}
+	return Unit{}
 }
 
-func (v updateVisitor) VisitScan(s *Scan) unit {
+func (v updateVisitor) VisitScan(s *Scan) Unit {
 	if v.updateScan != nil {
 		v.updateScan(s)
 	}
-	return unit{}
+	return Unit{}
 }
 
 // RegexOptimizer simplifies or even replaces regular expression filters.
@@ -70,7 +70,7 @@ type RegexOptimizer struct {
 	updateVisitor
 }
 
-var _ Visitor[unit] = &RegexOptimizer{}
+var _ Visitor[Unit] = &RegexOptimizer{}
 
 func NewRegexpOptimizer() *RegexOptimizer {
 	r := &RegexOptimizer{}
@@ -180,7 +180,7 @@ func ShardAggregations(p *Plan, resolver ShardResolver) *Plan {
 	for _, a := range aggregations {
 		for i := shards - 1; i >= 0; i-- {
 			updated := a.DeepClone()
-			Dispatch[unit](updated, NewScanUpdate(func(s *Scan) {
+			Dispatch[Unit](updated, NewScanUpdate(func(s *Scan) {
 				s.shard = &ShardAnnotation{i, shards}
 			}))
 			c.shards = append(c.shards, updated)

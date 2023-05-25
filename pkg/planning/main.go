@@ -19,7 +19,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	p.Root.Accept(&logical.RegexOptimizer{})
+	logical.Dispatch[logical.Unit](p.Root, logical.NewRegexpOptimizer())
 	p = logical.ShardAggregations(p, logical.ConstantShards(4))
 
 	p.Graphviz(os.Stdout)
