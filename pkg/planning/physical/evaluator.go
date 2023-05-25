@@ -19,7 +19,6 @@ type StepEvaluator interface {
 func NewStepEvaluator(p *logical.Plan) StepEvaluator {
 	return logical.Dispatch[StepEvaluator](p.Root, &evaluatorBuilder{})
 }
-
 		
 // TODO: Test and support case from https://github.com/grafana/loki/blob/main/pkg/logql/shardmapper_test.go#L465
 type evaluatorBuilder struct{}
@@ -29,7 +28,7 @@ var _ logical.Visitor[StepEvaluator] = &evaluatorBuilder{}
 func (b *evaluatorBuilder) VisitAggregation(a *logical.Aggregation) StepEvaluator {
 	switch a.Details.Name() {
 	case "sum":
-		return &SumAggregationEvaluator{}
+		return NewSumAggregationEvaluator(a.grouping, logical.Dispatch[StepEvaluator](a.Child(), b))
 	default:
 		return nil
 	}
