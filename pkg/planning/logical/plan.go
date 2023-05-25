@@ -142,11 +142,12 @@ type AggregationDetails interface {
 type Aggregation struct {
 	Details AggregationDetails
 	ID
+	Grouping syntax.Grouping
 	Parent
 }
 
 func (a *Aggregation) DeepClone() Operator {
-	return &Aggregation{ID: NewID(), Details: a.Details, Parent: a.Parent.DeepClone()}
+	return &Aggregation{ID: NewID(), Details: a.Details, Grouping: a.Grouping, Parent: a.Parent.DeepClone()}
 }
 
 type Sum struct {
@@ -341,7 +342,7 @@ func build(expr syntax.Expr) (Operator, error) {
 		if err != nil {
 			return nil, err
 		}
-		return &Aggregation{ID: NewID(), Details: details, Parent: Parent{p}}, nil
+		return &Aggregation{ID: NewID(), Details: details, Grouping: *concrete.Grouping, Parent: Parent{p}}, nil
 	case *syntax.RangeAggregationExpr:
 		child, err := build(concrete.Left)
 		if err != nil {
