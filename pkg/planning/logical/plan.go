@@ -30,22 +30,20 @@ type Operator interface {
 	SetChild(Operator)
 }
 
-func Dispatch[T any | ~string](o Operator, v Visitor[T]) T {
+func Dispatch[T any | ~string](o Operator, v Visitor[T]) (r T) {
 	switch concrete := o.(type) {
 	case *Aggregation:
-		return v.VisitAggregation(concrete)
+		r = v.VisitAggregation(concrete)
 	case *Coalescence:
-		return v.VisitCoalescence(concrete)
+		r = v.VisitCoalescence(concrete)
 	case *Filter:
-		return v.VisitFilter(concrete)
+		r = v.VisitFilter(concrete)
 	case *Map:
-		return v.VisitMap(concrete)
+		r = v.VisitMap(concrete)
 	case *Scan:
-		return v.VisitScan(concrete)
+		r = v.VisitScan(concrete)
 	}
-	// Return empty T
-	var r T
-	return r
+	return
 }
 
 // Type checks
