@@ -17,27 +17,51 @@ type updateVisitor struct {
 
 var _ Visitor[unit] = updateVisitor{}
 
-func (v updateVisitor) VisitAggregation(*Aggregation) unit {
+func (v updateVisitor) VisitAggregation(a *Aggregation) unit {
+	if a.Child() != nil {
+		Dispatch[unit](a.Child(), v)
+	}
 	return unit{}
 }
 
-func (v updateVisitor) VisitCoalescence(*Coalescence) unit {
+func (v updateVisitor) VisitCoalescence(c *Coalescence) unit {
+	for _, s := range c.shards {
+		Dispatch[unit](s, v)
+	}
 	return unit{}
 }
 
-func (v updateVisitor) VisitBinary(*Binary) unit {
+func (v updateVisitor) VisitBinary(b *Binary) unit {
+	if b.lhs != nil {
+		Dispatch[unit](b.lhs, v)
+	}
+	if b.rhs != nil {
+		Dispatch[unit](b.rhs, v)
+	}
 	return unit{}
 }
 
-func (v updateVisitor) VisitFilter(*Filter) unit {
+func (v updateVisitor) VisitFilter(f *Filter) unit {
+	if v.updateFilter != nil {
+		v.updateFilter(f)
+	}
+	if f.Child() != nil {
+		Dispatch[unit](f.Child(), v)
+	}
 	return unit{}
 }
 
-func (v updateVisitor) VisitMap(*Map) unit {
+func (v updateVisitor) VisitMap(m *Map) unit {
+	if m.Child() != nil {
+		Dispatch[unit](m.Child(), v)
+	}
 	return unit{}
 }
 
-func (v updateVisitor) VisitScan(*Scan) unit {
+func (v updateVisitor) VisitScan(s *Scan) unit {
+	if v.updateScan != nil {
+		v.updateScan(s)
+	}
 	return unit{}
 }
 
