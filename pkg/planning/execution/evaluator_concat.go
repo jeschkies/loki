@@ -2,6 +2,7 @@ package execution
 
 import (
 	"github.com/grafana/loki/pkg/util"
+	"github.com/prometheus/prometheus/promql"
 )
 
 // ConcatEvaluator joins multiple StepEvaluators.
@@ -12,16 +13,13 @@ type ConcatEvaluator struct {
 
 var _ StepEvaluator = &ConcatEvaluator{}
 
-func (e *ConcatEvaluator) Next() (bool, Value) {
-	var v Vector
-	var ok bool
-	var next Value
+func (e *ConcatEvaluator) Next() (ok bool, ts int64, vec promql.Vector) {
+	var cur promql.Vector
 	for _, eval := range e.evaluators {
-		ok, next = eval.Next()
-		cur := next.(Vector).vec
-		v.vec = append(v.vec, cur...)
+		ok, ts, cur = eval.Next()
+		vec = append(vec, cur...)
 	}
-	return ok, v
+	return ok, ts, vec
 }
 
 func (e *ConcatEvaluator) Close() (lastErr error) {

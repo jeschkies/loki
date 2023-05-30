@@ -37,13 +37,11 @@ type groupedAggregation struct {
 	groupCount int
 }
 
-func (e *SumAggregationEvaluator) Next() (bool, Value) {
-	next, value := e.upstream.Next()
-	vec := value.(Vector).vec
-	ts := value.(Vector).ts
+func (e *SumAggregationEvaluator) Next() (ok bool, ts int64, vec promql.Vector) {
+	next, ts, vec := e.upstream.Next()
 
 	if !next {
-		return false, Vector{}
+		return false, 0, promql.Vector{}
 	}
 	result := map[uint64]*groupedAggregation{}
 	for _, s := range vec {
@@ -96,7 +94,7 @@ func (e *SumAggregationEvaluator) Next() (bool, Value) {
 			F:      aggr.value,
 		})
 	}
-	return next, Vector{ts: ts, vec: vec} 
+	return next, ts, vec
 }
 
 func (e *SumAggregationEvaluator) Close() error {
