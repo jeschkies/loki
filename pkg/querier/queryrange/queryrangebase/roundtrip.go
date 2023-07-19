@@ -86,13 +86,32 @@ func (cfg *Config) Validate() error {
 type HandlerFunc func(context.Context, Request) (Response, error)
 
 // Do implements Handler.
-func (q HandlerFunc) Do(ctx context.Context, req Request) (Response, error) {
-	return q(ctx, req)
+func (q HandlerFunc) Do(ctx context.Context, req Request, h ResponseHandler) {
+	r, err := q(ctx, req)
+	h.Handle(r, err)
 }
 
 // Handler is like http.Handle, but specifically for Prometheus query_range calls.
 type Handler interface {
-	Do(context.Context, Request) (Response, error)
+	Do(context.Context, Request, ResponseHandler)
+}
+
+type defaultResponseHandler struct{
+	r chan struct{Response; error}
+}
+
+func(d *defaultResponseHandler) Handle(r Response, err error) {
+	d.r <- struct{Response; error}{r, err}
+}
+
+
+func(d *defaultResponseHandler) Wait() (Response, error) {
+	r := <- d.r
+	return r.Response, r.error
+}
+
+func NewDefaultResponseHandler()  *defaultResponseHandler {
+	return &defaultResponseHandler{r: make(chan struct{Response, error})}
 }
 
 // MiddlewareFunc is like http.HandlerFunc, but for Middleware.

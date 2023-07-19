@@ -11,3 +11,4 @@ type Codec = definitions.Codec
 type Merger = definitions.Merger
 type Request = definitions.Request
 type Response = definitions.Response
+type ResponseHandler = definitions.ResponseHandler

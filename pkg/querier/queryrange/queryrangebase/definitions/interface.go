@@ -56,3 +56,7 @@ type Response interface {
 	// GetHeaders returns the HTTP headers in the response.
 	GetHeaders() []*PrometheusResponseHeader
 }
+
+type ResponseHandler interface {
+	Handle(Response, error)
+}

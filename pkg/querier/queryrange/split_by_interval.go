@@ -124,6 +124,7 @@ func (h *splitByInterval) Process(
 
 	// per request wrapped handler for limiting the amount of series.
 	next := newSeriesLimiter(maxSeries).Wrap(h.next)
+	// TODO(karsten): use ResponseAggregator
 	for i := 0; i < p; i++ {
 		go h.loop(ctx, ch, next)
 	}
@@ -172,28 +173,31 @@ func (h *splitByInterval) loop(ctx context.Context, ch <-chan *lokiResult, next 
 	}
 }
 
-func (h *splitByInterval) Do(ctx context.Context, r queryrangebase.Request) (queryrangebase.Response, error) {
+func (s *splitByInterval) Do(ctx context.Context, r queryrangebase.Request, h queryrangebase.ResponseHandler) {
 	tenantIDs, err := tenant.TenantIDs(ctx)
 	if err != nil {
-		return nil, httpgrpc.Errorf(http.StatusBadRequest, err.Error())
+		h.Handle(nil, httpgrpc.Errorf(http.StatusBadRequest, err.Error()))
+		return
 	}
 
-	interval := validation.MaxDurationOrZeroPerTenant(tenantIDs, h.limits.QuerySplitDuration)
+	interval := validation.MaxDurationOrZeroPerTenant(tenantIDs, s.limits.QuerySplitDuration)
 	// skip split by if unset
 	if interval == 0 {
-		return h.next.Do(ctx, r)
+		s.next.Do(ctx, r, h)
+		return
 	}
 
-	intervals, err := h.splitter(r, interval)
+	intervals, err := s.splitter(r, interval)
 	if err != nil {
-		return nil, err
+		h.Handle(nil, err)
 	}
 
-	h.metrics.splits.Observe(float64(len(intervals)))
+	s.metrics.splits.Observe(float64(len(intervals)))
 
 	// no interval should not be processed by the frontend.
 	if len(intervals) == 0 {
-		return h.next.Do(ctx, r)
+		s.next.Do(ctx, r, h)
+		return
 	}
 
 	if sp := opentracing.SpanFromContext(ctx); sp != nil {
@@ -201,7 +205,8 @@ func (h *splitByInterval) Do(ctx context.Context, r queryrangebase.Request) (que
 	}
 
 	if len(intervals) == 1 {
-		return h.next.Do(ctx, intervals[0])
+		s.next.Do(ctx, intervals[0], h)
+		return
 	}
 
 	var limit int64
@@ -217,7 +222,8 @@ func (h *splitByInterval) Do(ctx context.Context, r queryrangebase.Request) (que
 		// Set this to 0 since this is not used in Series/Labels/Index Request.
 		limit = 0
 	default:
-		return nil, httpgrpc.Errorf(http.StatusBadRequest, "unknown request type")
+		h.Handle(nil, httpgrpc.Errorf(http.StatusBadRequest, "unknown request type"))
+		return
 	}
 
 	input := make([]*lokiResult, 0, len(intervals))
@@ -228,14 +234,16 @@ func (h *splitByInterval) Do(ctx context.Context, r queryrangebase.Request) (que
 		})
 	}
 
-	maxSeriesCapture := func(id string) int { return h.limits.MaxQuerySeries(ctx, id) }
+	maxSeriesCapture := func(id string) int { return s.limits.MaxQuerySeries(ctx, id) }
 	maxSeries := validation.SmallestPositiveIntPerTenant(tenantIDs, maxSeriesCapture)
-	maxParallelism := MinWeightedParallelism(ctx, tenantIDs, h.configs, h.limits, model.Time(r.GetStart()), model.Time(r.GetEnd()))
-	resps, err := h.Process(ctx, maxParallelism, limit, input, maxSeries)
+	maxParallelism := MinWeightedParallelism(ctx, tenantIDs, s.configs, s.limits, model.Time(r.GetStart()), model.Time(r.GetEnd()))
+	resps, err := s.Process(ctx, maxParallelism, limit, input, maxSeries)
 	if err != nil {
-		return nil, err
+		h.Handle(nil, err)
+		return
 	}
-	return h.merger.MergeResponse(resps...)
+	res, err := s.merger.MergeResponse(resps...)
+	h.Handle(res, err)
 }
 
 func splitByTime(req queryrangebase.Request, interval time.Duration) ([]queryrangebase.Request, error) {

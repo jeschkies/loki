@@ -114,7 +114,9 @@ func StatsCollectorMiddleware() queryrangebase.Middleware {
 			middlewareStats, statsCtx := stats.NewContext(ctx)
 
 			// execute the request
-			resp, err := next.Do(statsCtx, req)
+			h := queryrangebase.NewDefaultResponseHandler()
+			next.Do(statsCtx, req, h)
+			resp, err := h.Wait()
 			if err != nil {
 				return resp, err
 			}

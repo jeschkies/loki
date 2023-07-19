@@ -105,7 +105,9 @@ func (in instance) Downstream(ctx context.Context, queries []logql.DownstreamQue
 		defer logger.Finish()
 		level.Debug(logger).Log("shards", fmt.Sprintf("%+v", qry.Shards), "query", req.GetQuery(), "step", req.GetStep(), "handler", reflect.TypeOf(in.handler))
 
-		res, err := in.handler.Do(ctx, req)
+		h := queryrangebase.NewDefaultResponseHandler()
+		in.handler.Do(ctx, req, h)
+		res, err := h.Wait()
 		if err != nil {
 			return logqlmodel.Result{}, err
 		}
