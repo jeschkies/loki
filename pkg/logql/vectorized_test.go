@@ -9,6 +9,7 @@ import (
 	"io"
 	"testing"
 
+	"github.com/grafana/regexp"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/stretchr/testify/require"
 
@@ -70,17 +71,19 @@ func Benchmark_PipelineLarge(b *testing.B) {
 	haystack, err := loadHaystack("big.log")
 	require.NoError(b, err)
 
-	stages := []log.Stage{
-		mustFilter(log.NewFilter(string(needle), labels.MatchEqual)).ToStage(),
-	}
-	p := log.NewPipeline(stages)
 	lbs := labels.FromStrings("cluster", "ops-tool1",
 		"name", "querier",
 	)
-	sp := p.ForStream(lbs)
 
 	iterator := NewIter(haystack, lbs)
+
 	b.Run("iterative", func(b *testing.B) {
+		stages := []log.Stage{
+			mustFilter(log.NewFilter(string(needle), labels.MatchEqual)).ToStage(),
+		}
+		p := log.NewPipeline(stages)
+		sp := p.ForStream(lbs)
+
 		require.Len(b, iterator.(*iterImpl).entries, 5196783)
 		b.ResetTimer()
 		b.ReportAllocs()
@@ -105,6 +108,65 @@ func Benchmark_PipelineLarge(b *testing.B) {
 		b.ReportAllocs()
 		for n := 0; n < b.N; n++ {
 			VecFilter(batch, 0, needle)
+			//require.Len(b, updated.Selection(), 76416)
+		}
+	})
+
+	b.Run("regexp", func(b *testing.B) {
+		stages := []log.Stage{
+			mustFilter(log.NewFilter(".*DELETE.*compelling", labels.MatchRegexp)).ToStage(),
+		}
+		p := log.NewPipeline(stages)
+		sp := p.ForStream(lbs)
+		require.Len(b, iterator.(*iterImpl).entries, 5196783)
+		b.ResetTimer()
+		b.ReportAllocs()
+		for n := 0; n < b.N; n++ {
+			iterator.Reset()
+			//lines := 0
+			for iterator.Next() {
+				entry := iterator.Entry()
+				sp.Process(entry.ts, entry.line)
+				//lines += bool2int(matches)
+			}
+			//require.Equal(b, 76416, lines)
+		}
+	})
+
+	b.Run("regexp-prefilter", func(b *testing.B) {
+		stages := []log.Stage{
+			mustFilter(log.NewFilter("DELETE", labels.MatchEqual)).ToStage(),
+			mustFilter(log.NewFilter(".*DELETE.*compelling", labels.MatchRegexp)).ToStage(),
+		}
+		p := log.NewPipeline(stages)
+		sp := p.ForStream(lbs)
+		require.Len(b, iterator.(*iterImpl).entries, 5196783)
+		b.ResetTimer()
+		b.ReportAllocs()
+		for n := 0; n < b.N; n++ {
+			iterator.Reset()
+			//lines := 0
+			for iterator.Next() {
+				entry := iterator.Entry()
+				sp.Process(entry.ts, entry.line)
+				//lines += bool2int(matches)
+			}
+			//require.Equal(b, 76416, lines)
+		}
+	})
+
+	b.Run("regexp-vectorized", func(b *testing.B) {
+		needle := []byte(`DELETE`)
+		r := regexp.MustCompile(".*DELETE.*compelling")
+		vecs := NewEntriesVec(haystack)
+		require.Equal(b, len(vecs[1].Int()), 5196783)
+		require.Equal(b, len(vecs[2].Int()), 5196783)
+		batch := NewBatch(vecs)
+		b.ResetTimer()
+		b.ReportAllocs()
+		for n := 0; n < b.N; n++ {
+			updated := VecFilter(batch, 0, needle)
+			VecRegexp(updated, 0, r)
 			//require.Len(b, updated.Selection(), 76416)
 		}
 	})

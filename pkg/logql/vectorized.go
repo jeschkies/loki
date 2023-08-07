@@ -4,6 +4,7 @@ import (
 	//"fmt"
 	"bytes"
 
+	"github.com/grafana/regexp"
 	memmem "github.com/jeschkies/go-memmem/pkg/search"
 )
 
@@ -84,8 +85,6 @@ func VecFilter(input Batch, col int, needle []byte) Batch {
 	vec := input.ColVec(col)
 	haystack := vec.Bytes()
 	entryPositions := input.ColVec(1).Int()
-	//endIndices := input.ColVec(2)
-	//selection := make([]int, len(startIndices))
 
 	selection := make([]int, 0)
 	i := 0
@@ -105,6 +104,27 @@ func VecFilter(input Batch, col int, needle []byte) Batch {
 	}
 
 	return input.WithSelection(selection)
+}
+
+func VecRegexp(input Batch, col int, r *regexp.Regexp) Batch {
+	vec := input.ColVec(col)
+	haystack := vec.Bytes()
+	entryPositions := input.ColVec(1).Int()
+
+	updatedSelection := make([]int, 0)
+	selIndex := 0
+	for selIndex < len(input.Selection())-1 {
+		if r.Match(haystack[entryPositions[selIndex]:entryPositions[selIndex+1]]) {
+			updatedSelection = append(updatedSelection, selIndex)
+		}
+		selIndex++
+	}
+	// Test last selection
+	if r.Match(haystack[entryPositions[selIndex]:]) {
+		updatedSelection = append(updatedSelection, selIndex)
+	}
+
+	return input.WithSelection(updatedSelection)
 }
 
 func bool2int(b bool) int {
