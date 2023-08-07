@@ -19,9 +19,6 @@ func Benchmark_PipelineLarge(b *testing.B) {
 	haystack, err := loadHaystack("big.log")
 	require.NoError(b, err)
 
-	reader := bytes.NewReader(haystack)
-	scanner := bufio.NewScanner(reader)
-
 	// TODO: maybe we want to use the entry iterator
 	// https://github.com/grafana/loki/blob/main/pkg/ingester/stream_test.go#L186
 	stages := []log.Stage{
@@ -32,25 +29,30 @@ func Benchmark_PipelineLarge(b *testing.B) {
 		"name", "querier",
 	)
 	sp := p.ForStream(lbs)
-	var iterator Iter = iterImpl{scanner: scanner, labels: lbs}
 
 	b.Run("iterative", func(b *testing.B) {
 		b.ResetTimer()
 		b.ReportAllocs()
 		for n := 0; n < b.N; n++ {
-			reader.Seek(0, io.SeekStart) //nolint:errcheck
+			//lines := 0
+			var iterator Iter = iterImpl{
+				scanner: bufio.NewScanner(bytes.NewReader(haystack)),
+				labels: lbs,
+			}
 			for iterator.Next() {
 				entry := iterator.Entry()
 				sp.Process(0, entry.line)
+				//lines += bool2int(matches)
 			}
+			//require.Equalf(b, 76416, lines, "did not find all lines at iteration %d: want(76416), got(%d)", n, lines)
 		}
 	})
 
-	batch := NewBatch([]Vec{bytesVec(haystack)})
 	b.Run("vectorized", func(b *testing.B) {
 		b.ResetTimer()
 		b.ReportAllocs()
 		for n := 0; n < b.N; n++ {
+			batch := NewBatch([]Vec{bytesVec(haystack)})
 			VecFilter(batch, 0, needle)
 		}
 	})
@@ -103,4 +105,16 @@ func mustFilter(f log.Filterer, err error) log.Filterer {
 		panic(err)
 	}
 	return f
+}
+
+func bool2int(b bool) int {
+	// The compiler currently only optimizes this form.
+	// See issue 6011.
+	var i int
+	if b {
+		i = 1
+	} else {
+		i = 0
+	}
+	return i
 }
