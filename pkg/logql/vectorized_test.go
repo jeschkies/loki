@@ -13,7 +13,7 @@ import (
 	"github.com/grafana/loki/pkg/logql/log"
 )
 
-func Test_EntryVec(t * testing.T) {
+func Test_EntryVec(t *testing.T) {
 	haystack := []byte(`96.81.153.18 - predovic2578 [02/May/2023:10:21:20 +0000] "PATCH /extend HTTP/1.0" 502 12210
 203.48.225.9 - - [02/May/2023:10:21:20 +0000] "PATCH /back-end/facilitate/mission-critical/orchestrate HTTP/2.0" 204 15545
 254.4.4.148 - - [02/May/2023:10:21:20 +0000] "DELETE /compelling/strategic/integrated HTTP/1.0" 500 15822
