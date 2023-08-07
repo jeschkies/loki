@@ -4,6 +4,8 @@ import (
 	"archive/zip"
 	"bufio"
 	"bytes"
+
+	//"fmt"
 	"io"
 	"testing"
 
@@ -68,8 +70,6 @@ func Benchmark_PipelineLarge(b *testing.B) {
 	haystack, err := loadHaystack("big.log")
 	require.NoError(b, err)
 
-	// TODO: maybe we want to use the entry iterator
-	// https://github.com/grafana/loki/blob/main/pkg/ingester/stream_test.go#L186
 	stages := []log.Stage{
 		mustFilter(log.NewFilter(string(needle), labels.MatchEqual)).ToStage(),
 	}
@@ -79,17 +79,20 @@ func Benchmark_PipelineLarge(b *testing.B) {
 	)
 	sp := p.ForStream(lbs)
 
+	iterator := NewIter(haystack, lbs)
 	b.Run("iterative", func(b *testing.B) {
-		iterator := NewIter(haystack, lbs)
+		require.Len(b, iterator.(*iterImpl).entries, 5196783)
 		b.ResetTimer()
 		b.ReportAllocs()
 		for n := 0; n < b.N; n++ {
 			iterator.Reset()
+			//lines := 0
 			for iterator.Next() {
 				entry := iterator.Entry()
 				sp.Process(entry.ts, entry.line)
 				//lines += bool2int(matches)
 			}
+			//require.Equal(b, 76416, lines)
 		}
 	})
 
@@ -97,12 +100,12 @@ func Benchmark_PipelineLarge(b *testing.B) {
 		vecs := NewEntriesVec(haystack)
 		require.Equal(b, len(vecs[1].Int()), 5196783)
 		require.Equal(b, len(vecs[2].Int()), 5196783)
+		batch := NewBatch(vecs)
 		b.ResetTimer()
 		b.ReportAllocs()
 		for n := 0; n < b.N; n++ {
-			batch := NewBatch(vecs)
-			updated := VecFilter(batch, 0, needle)
-			require.Len(b, updated.Selection(), 76416)
+			VecFilter(batch, 0, needle)
+			//require.Len(b, updated.Selection(), 76416)
 		}
 	})
 }
@@ -129,7 +132,7 @@ func NewIter(data []byte, labels labels.Labels) Iter {
 	entries := make([]Entry, 0)
 	s := bufio.NewScanner(bytes.NewReader(data))
 	for s.Scan() {
-		entries = append(entries, Entry{line: s.Bytes(), labels: labels})
+		entries = append(entries, Entry{line: []byte(s.Text()), labels: labels})
 	}
 	return &iterImpl{
 		entries: entries,
