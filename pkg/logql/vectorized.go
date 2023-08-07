@@ -83,37 +83,25 @@ func (b *mutableBatch) WithSelection(selection []int) Batch {
 func VecFilter(input Batch, col int, needle []byte) Batch {
 	vec := input.ColVec(col)
 	haystack := vec.Bytes()
-	startIndices := input.ColVec(1).Int()
+	entryPositions := input.ColVec(1).Int()
 	//endIndices := input.ColVec(2)
 	//selection := make([]int, len(startIndices))
 
-	start := int64(0)
-	positions := make([]int64, 0)
-	//i := 0
-	for start < int64(len(haystack)-len(needle)) {
-		//i++
-		//fmt.Printf("(%d) starting at: %d\n", i, start)
-		pos := memmem.Index(haystack[start:], needle)
-		if pos == -1 {
+	selection := make([]int, 0)
+	i := 0
+	for i < len(entryPositions) {
+		start := entryPositions[i]
+		offset := memmem.Index(haystack[start:], needle)
+		if offset == -1 {
 			break
 		}
-		positions = append(positions, start+pos)
-		start = start + pos + 1
-		//fmt.Printf("(%d) next starting at: %d\n", i, start)
-	}
 
-	selection := make([]int, 0)
-	pos := positions[0]
-	for i := range startIndices {
-		// TODO: try to be branchless
-		if startIndices[i] <= pos && (i+1 == len(startIndices) || pos < startIndices[i+1]) {
-			selection = append(selection, i)
-			positions = positions[1:]
-			if len(positions) == 0 {
-				break
-			}
-			pos = positions[0]
+		// Find first start that is above pos.
+		// TODO: We can probably be branchless here.
+		for entryPositions[i] <= start+offset {
+			i++
 		}
+		selection = append(selection, i-1)
 	}
 
 	return input.WithSelection(selection)

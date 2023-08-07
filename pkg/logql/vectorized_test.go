@@ -46,7 +46,7 @@ func Test_EntryVec(t *testing.T) {
 func Test_VecFilter(t *testing.T) {
 	haystack := []byte(`96.81.153.18 - predovic2578 [02/May/2023:10:21:20 +0000] "PATCH /extend HTTP/1.0" 502 12210
 203.48.225.9 - - [02/May/2023:10:21:20 +0000] "PATCH /back-end/facilitate/mission-critical/orchestrate HTTP/2.0" 204 15545
-254.4.4.148 - - [02/May/2023:10:21:20 +0000] "DELETE /compelling/strategic/integrated HTTP/1.0" 500 15822
+254.4.4.148 - - [02/May/2023:10:21:20 +0000] "DELETE /compelling/DELETE/integrated HTTP/1.0" 500 15822
 34.194.247.251 - - [02/May/2023:10:21:20 +0000] "PATCH /niches/mindshare HTTP/2.0" 405 27960
 180.103.196.205 - strosin3705 [02/May/2023:10:21:20 +0000] "PATCH /proactive/e-markets/out-of-the-box/roi HTTP/1.1" 502 27669
 20.34.120.221 - - [02/May/2023:10:21:20 +0000] "DELETE /eyeballs/expedite/proactive HTTP/1.0" 301 22049
@@ -80,16 +80,14 @@ func Benchmark_PipelineLarge(b *testing.B) {
 	sp := p.ForStream(lbs)
 
 	b.Run("iterative", func(b *testing.B) {
+		iterator := NewIter(haystack, lbs)
 		b.ResetTimer()
 		b.ReportAllocs()
 		for n := 0; n < b.N; n++ {
-			var iterator Iter = iterImpl{
-				scanner: bufio.NewScanner(bytes.NewReader(haystack)),
-				labels:  lbs,
-			}
+			iterator.Reset()
 			for iterator.Next() {
 				entry := iterator.Entry()
-				sp.Process(0, entry.line)
+				sp.Process(entry.ts, entry.line)
 				//lines += bool2int(matches)
 			}
 		}
@@ -118,23 +116,38 @@ type Entry struct {
 type Iter interface {
 	Next() bool
 	Entry() Entry
+	Reset()
 }
 
 type iterImpl struct {
-	scanner *bufio.Scanner
+	entries []Entry
+	pos     int
 	labels  labels.Labels
 }
 
-func (i iterImpl) Next() bool {
-	return i.scanner.Scan()
+func NewIter(data []byte, labels labels.Labels) Iter {
+	entries := make([]Entry, 0)
+	s := bufio.NewScanner(bytes.NewReader(data))
+	for s.Scan() {
+		entries = append(entries, Entry{line: s.Bytes(), labels: labels})
+	}
+	return &iterImpl{
+		entries: entries,
+		pos:     0,
+	}
 }
 
-func (i iterImpl) Entry() Entry {
-	return Entry{
-		ts:     0,
-		line:   i.scanner.Bytes(),
-		labels: i.labels,
-	}
+func (i *iterImpl) Next() bool {
+	i.pos++
+	return i.pos < len(i.entries)
+}
+
+func (i *iterImpl) Entry() Entry {
+	return i.entries[i.pos]
+}
+
+func (i *iterImpl) Reset() {
+	i.pos = 0
 }
 
 func loadHaystack(name string) ([]byte, error) {
