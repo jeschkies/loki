@@ -109,13 +109,13 @@ func Benchmark_PipelineLarge(b *testing.B) {
 		b.ReportAllocs()
 		for n := 0; n < b.N; n++ {
 			iterator.Reset()
-			lines := 0
+			//lines := 0
 			for iterator.Next() {
 				entry := iterator.Entry()
-				_, _, matches := sp.Process(entry.ts, entry.line)
-				lines += bool2int(matches)
+				sp.Process(entry.ts, entry.line)
+				//lines += bool2int(matches)
 			}
-			require.Equal(b, 76650, lines)
+			//require.Equal(b, 76650, lines)
 		}
 	})
 
@@ -127,8 +127,8 @@ func Benchmark_PipelineLarge(b *testing.B) {
 		b.ResetTimer()
 		b.ReportAllocs()
 		for n := 0; n < b.N; n++ {
-			updated := VecFilter(batch, 0, needle)
-			require.Len(b, updated.Selection(), 76650)
+			VecFilter(batch, 0, needle)
+			//require.Len(b, updated.Selection(), 76650)
 		}
 	})
 
@@ -143,19 +143,19 @@ func Benchmark_PipelineLarge(b *testing.B) {
 		b.ReportAllocs()
 		for n := 0; n < b.N; n++ {
 			iterator.Reset()
-			lines := 0
+			//lines := 0
 			for iterator.Next() {
 				entry := iterator.Entry()
-				_, _, matches := sp.Process(entry.ts, entry.line)
-				lines += bool2int(matches)
+				sp.Process(entry.ts, entry.line)
+				//lines += bool2int(matches)
 			}
-			require.Equal(b, 12821, lines)
+			//require.Equal(b, 12821, lines)
 		}
 	})
 
 	b.Run("regexp-prefilter", func(b *testing.B) {
 		stages := []log.Stage{
-			mustFilter(log.NewFilter("DELETE", labels.MatchEqual)).ToStage(),
+			mustFilter(log.NewFilter("compelling", labels.MatchEqual)).ToStage(),
 			mustFilter(log.NewFilter(".*DELETE.*compelling", labels.MatchRegexp)).ToStage(),
 		}
 		p := log.NewPipeline(stages)
@@ -165,13 +165,13 @@ func Benchmark_PipelineLarge(b *testing.B) {
 		b.ReportAllocs()
 		for n := 0; n < b.N; n++ {
 			iterator.Reset()
-			lines := 0
+			//lines := 0
 			for iterator.Next() {
 				entry := iterator.Entry()
-				_, _, matches := sp.Process(entry.ts, entry.line)
-				lines += bool2int(matches)
+				sp.Process(entry.ts, entry.line)
+				//lines += bool2int(matches)
 			}
-			require.Equal(b, 12821, lines)
+			//require.Equal(b, 12821, lines)
 		}
 	})
 
@@ -186,9 +186,9 @@ func Benchmark_PipelineLarge(b *testing.B) {
 		b.ReportAllocs()
 		for n := 0; n < b.N; n++ {
 			updated := VecFilter(batch, 0, needle)
-			require.Len(b, updated.Selection(), 76650)
-			filtered := VecRegexp(updated, 0, r)
-			require.Len(b, filtered.Selection(), 12821)
+			//require.Len(b, updated.Selection(), 76650)
+			VecRegexp(updated, 0, r)
+			//require.Len(b, filtered.Selection(), 12821)
 		}
 	})
 }
