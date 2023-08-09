@@ -77,8 +77,10 @@ func (b *mutableBatch) Selection() []int {
 }
 
 func (b *mutableBatch) WithSelection(selection []int) Batch {
-	b.selection = selection
-	return b
+	return &mutableBatch{
+		vectors: b.vectors,
+		selection: selection,
+	}
 }
 
 func VecFilter(input Batch, col int, needle []byte) Batch {
@@ -112,16 +114,17 @@ func VecRegexp(input Batch, col int, r *regexp.Regexp) Batch {
 	entryPositions := input.ColVec(1).Int()
 
 	updatedSelection := make([]int, 0)
-	selIndex := 0
-	for selIndex < len(input.Selection())-1 {
-		if r.Match(haystack[entryPositions[selIndex]:entryPositions[selIndex+1]]) {
+	for _, selIndex := range input.Selection() {
+		var s []byte
+		if selIndex < len(entryPositions)-1 {
+			s = haystack[entryPositions[selIndex]:entryPositions[selIndex+1]]
+		} else {
+			s = haystack[entryPositions[selIndex]:]
+		}
+		if r.Match(s) {
 			updatedSelection = append(updatedSelection, selIndex)
 		}
 		selIndex++
-	}
-	// Test last selection
-	if r.Match(haystack[entryPositions[selIndex]:]) {
-		updatedSelection = append(updatedSelection, selIndex)
 	}
 
 	return input.WithSelection(updatedSelection)

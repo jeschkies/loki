@@ -65,9 +65,29 @@ func Test_VecFilter(t *testing.T) {
 	require.ElementsMatch(t, updated.Selection(), []int{2, 5})
 }
 
+func Test_VecRegexp(t *testing.T) {
+	haystack := []byte(`96.81.153.18 - predovic2578 [02/May/2023:10:21:20 +0000] "PATCH /extend HTTP/1.0" 502 12210
+203.48.225.9 - - [02/May/2023:10:21:20 +0000] "PATCH /back-end/facilitate/mission-critical/orchestrate HTTP/2.0" 204 15545
+254.4.4.148 - - [02/May/2023:10:21:20 +0000] "DELETE /compelling/DELETE/integrated HTTP/1.0" 500 15822
+34.194.247.251 - - [02/May/2023:10:21:20 +0000] "PATCH /niches/mindshare HTTP/2.0" 405 27960
+180.103.196.205 - strosin3705 [02/May/2023:10:21:20 +0000] "PATCH /compelling/e-markets/out-of-the-box/roi HTTP/1.1" 502 27669
+20.34.120.221 - - [02/May/2023:10:21:20 +0000] "DELETE /eyeballs/expedite/proactive HTTP/1.0" 301 22049
+63.216.162.248 - keeling6124 [02/May/2023:10:21:20 +0000] "PATCH /reinvent HTTP/2.0" 501 13633
+253.252.67.36 - - [02/May/2023:10:21:20 +0000] "DELETE /compelling/communities/reintermediate HTTP/2.0" 416 25477
+207.148.140.17 - - [02/May/2023:10:21:20 +0000] "PATCH /orchestrate/synergies/back-end HTTP/1.1" 406 20607
+226.80.242.123 - - [02/May/2023:10:21:20 +0000] "POST /synergies HTTP/2.0" 203 2523
+`)
+
+	vecs := NewEntriesVec(haystack)
+	batch := NewBatch(vecs)
+	r := regexp.MustCompile(".*DELETE.*compelling")
+	filtered := VecFilter(batch, 0, []byte("compelling"))
+	updated := VecRegexp(filtered, 0, r)
+	require.ElementsMatch(t, updated.Selection(), []int{2, 7})
+}
+
 func Benchmark_PipelineLarge(b *testing.B) {
-	//needle := []byte(`77.47.98.232 - - [02/May/2023:10:20:14 +0000] "GET /empower/e-business/whiteboard`)
-	needle := []byte(`whiteboard`)
+	needle := []byte(`compelling`)
 	haystack, err := loadHaystack("big.log")
 	require.NoError(b, err)
 
@@ -89,13 +109,13 @@ func Benchmark_PipelineLarge(b *testing.B) {
 		b.ReportAllocs()
 		for n := 0; n < b.N; n++ {
 			iterator.Reset()
-			//lines := 0
+			lines := 0
 			for iterator.Next() {
 				entry := iterator.Entry()
-				sp.Process(entry.ts, entry.line)
-				//lines += bool2int(matches)
+				_, _, matches := sp.Process(entry.ts, entry.line)
+				lines += bool2int(matches)
 			}
-			//require.Equal(b, 76416, lines)
+			require.Equal(b, 76650, lines)
 		}
 	})
 
@@ -107,8 +127,8 @@ func Benchmark_PipelineLarge(b *testing.B) {
 		b.ResetTimer()
 		b.ReportAllocs()
 		for n := 0; n < b.N; n++ {
-			VecFilter(batch, 0, needle)
-			//require.Len(b, updated.Selection(), 76416)
+			updated := VecFilter(batch, 0, needle)
+			require.Len(b, updated.Selection(), 76650)
 		}
 	})
 
@@ -123,13 +143,13 @@ func Benchmark_PipelineLarge(b *testing.B) {
 		b.ReportAllocs()
 		for n := 0; n < b.N; n++ {
 			iterator.Reset()
-			//lines := 0
+			lines := 0
 			for iterator.Next() {
 				entry := iterator.Entry()
-				sp.Process(entry.ts, entry.line)
-				//lines += bool2int(matches)
+				_, _, matches := sp.Process(entry.ts, entry.line)
+				lines += bool2int(matches)
 			}
-			//require.Equal(b, 76416, lines)
+			require.Equal(b, 12821, lines)
 		}
 	})
 
@@ -145,18 +165,18 @@ func Benchmark_PipelineLarge(b *testing.B) {
 		b.ReportAllocs()
 		for n := 0; n < b.N; n++ {
 			iterator.Reset()
-			//lines := 0
+			lines := 0
 			for iterator.Next() {
 				entry := iterator.Entry()
-				sp.Process(entry.ts, entry.line)
-				//lines += bool2int(matches)
+				_, _, matches := sp.Process(entry.ts, entry.line)
+				lines += bool2int(matches)
 			}
-			//require.Equal(b, 76416, lines)
+			require.Equal(b, 12821, lines)
 		}
 	})
 
 	b.Run("regexp-vectorized", func(b *testing.B) {
-		needle := []byte(`DELETE`)
+		needle := []byte(`compelling`)
 		r := regexp.MustCompile(".*DELETE.*compelling")
 		vecs := NewEntriesVec(haystack)
 		require.Equal(b, len(vecs[1].Int()), 5196783)
@@ -166,8 +186,9 @@ func Benchmark_PipelineLarge(b *testing.B) {
 		b.ReportAllocs()
 		for n := 0; n < b.N; n++ {
 			updated := VecFilter(batch, 0, needle)
-			VecRegexp(updated, 0, r)
-			//require.Len(b, updated.Selection(), 76416)
+			require.Len(b, updated.Selection(), 76650)
+			filtered := VecRegexp(updated, 0, r)
+			require.Len(b, filtered.Selection(), 12821)
 		}
 	})
 }
