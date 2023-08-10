@@ -78,7 +78,7 @@ func (b *mutableBatch) Selection() []int {
 
 func (b *mutableBatch) WithSelection(selection []int) Batch {
 	return &mutableBatch{
-		vectors: b.vectors,
+		vectors:   b.vectors,
 		selection: selection,
 	}
 }
