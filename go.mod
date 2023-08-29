@@ -5,7 +5,7 @@ go 1.20
 require (
 	cloud.google.com/go/bigtable v1.18.1
 	cloud.google.com/go/pubsub v1.32.0
-	cloud.google.com/go/storage v1.30.1
+	cloud.google.com/go/storage v1.32.0
 	github.com/Azure/azure-pipeline-go v0.2.3
 	github.com/Azure/azure-storage-blob-go v0.14.0
 	github.com/Azure/go-autorest/autorest/adal v0.9.23
