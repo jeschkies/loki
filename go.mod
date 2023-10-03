@@ -3,7 +3,7 @@ module github.com/grafana/loki
 go 1.20
 
 require (
-	cloud.google.com/go/bigtable v1.18.1
+	cloud.google.com/go/bigtable v1.20.0
 	cloud.google.com/go/pubsub v1.32.0
 	cloud.google.com/go/storage v1.30.1
 	github.com/Azure/azure-pipeline-go v0.2.3
@@ -311,7 +311,7 @@ require (
 	golang.org/x/tools v0.11.0 // indirect
 	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
-	google.golang.org/genproto v0.0.0-20230717213848-3f92550aa753 // indirect
+	google.golang.org/genproto v0.0.0-20230726155614-23370e0ffb3e // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20230717213848-3f92550aa753 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20230717213848-3f92550aa753 // indirect
 	gopkg.in/fsnotify/fsnotify.v1 v1.4.7 // indirect
