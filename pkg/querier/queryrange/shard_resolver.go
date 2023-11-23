@@ -34,7 +34,7 @@ func shardResolverForConf(
 	maxParallelism int,
 	maxShards int,
 	r queryrangebase.Request,
-	handler queryrangebase.Handler,
+	handler queryrangebase.Handler[*logproto.IndexStatsRequest],
 	limits Limits,
 ) (logql.ShardResolver, bool) {
 	if conf.IndexType == config.TSDBType {
@@ -58,7 +58,7 @@ func shardResolverForConf(
 
 type dynamicShardResolver struct {
 	ctx     context.Context
-	handler queryrangebase.Handler
+	handler queryrangebase.Handler[*logproto.IndexStatsRequest]
 	logger  log.Logger
 	limits  Limits
 
@@ -72,7 +72,7 @@ type dynamicShardResolver struct {
 func getStatsForMatchers(
 	ctx context.Context,
 	logger log.Logger,
-	statsHandler queryrangebase.Handler,
+	statsHandler queryrangebase.Handler[*logproto.IndexStatsRequest],
 	start, end model.Time,
 	matcherGroups []syntax.MatcherRange,
 	parallelism int,

@@ -25,8 +25,8 @@ import (
 	"github.com/grafana/loki/pkg/util/validation"
 )
 
-type lokiResult struct {
-	req queryrangebase.Request
+type lokiResult[R queryrangebase.Request] struct {
+	req R
 	ch  chan *packedResp
 }
 
@@ -50,25 +50,25 @@ func NewSplitByMetrics(r prometheus.Registerer) *SplitByMetrics {
 	}
 }
 
-type splitByInterval struct {
+type splitByInterval[R queryrangebase.Request] struct {
 	configs  []config.PeriodConfig
-	next     queryrangebase.Handler
+	next     queryrangebase.Handler[R]
 	limits   Limits
 	merger   queryrangebase.Merger
 	metrics  *SplitByMetrics
-	splitter Splitter
+	splitter Splitter[R]
 }
 
-type Splitter func(req queryrangebase.Request, interval time.Duration) ([]queryrangebase.Request, error)
+type Splitter[R queryrangebase.Request] func(req queryrangebase.Request, interval time.Duration) ([]R, error)
 
 // SplitByIntervalMiddleware creates a new Middleware that splits log requests by a given interval.
-func SplitByIntervalMiddleware(configs []config.PeriodConfig, limits Limits, merger queryrangebase.Merger, splitter Splitter, metrics *SplitByMetrics) queryrangebase.Middleware {
+func SplitByIntervalMiddleware[R queryrangebase.Request](configs []config.PeriodConfig, limits Limits, merger queryrangebase.Merger, splitter Splitter, metrics *SplitByMetrics) queryrangebase.Middleware[R] {
 	if metrics == nil {
 		metrics = NewSplitByMetrics(nil)
 	}
 
-	return queryrangebase.MiddlewareFunc(func(next queryrangebase.Handler) queryrangebase.Handler {
-		return &splitByInterval{
+	return queryrangebase.MiddlewareFunc[R](func(next queryrangebase.Handler[R]) queryrangebase.Handler[R] {
+		return &splitByInterval[R]{
 			configs:  configs,
 			next:     next,
 			limits:   limits,
@@ -79,8 +79,8 @@ func SplitByIntervalMiddleware(configs []config.PeriodConfig, limits Limits, mer
 	})
 }
 
-func (h *splitByInterval) Feed(ctx context.Context, input []*lokiResult) chan *lokiResult {
-	ch := make(chan *lokiResult)
+func (h *splitByInterval[R]) Feed(ctx context.Context, input []*lokiResult[R]) chan *lokiResult[R] {
+	ch := make(chan *lokiResult[R])
 
 	go func() {
 		defer close(ch)
@@ -97,11 +97,11 @@ func (h *splitByInterval) Feed(ctx context.Context, input []*lokiResult) chan *l
 	return ch
 }
 
-func (h *splitByInterval) Process(
+func (h *splitByInterval[R]) Process(
 	ctx context.Context,
 	parallelism int,
 	threshold int64,
-	input []*lokiResult,
+	input []*lokiResult[R],
 	maxSeries int,
 ) ([]queryrangebase.Response, error) {
 	var responses []queryrangebase.Response
@@ -156,7 +156,7 @@ func (h *splitByInterval) Process(
 	return responses, nil
 }
 
-func (h *splitByInterval) loop(ctx context.Context, ch <-chan *lokiResult, next queryrangebase.Handler) {
+func (h *splitByInterval[R]) loop(ctx context.Context, ch <-chan *lokiResult[R], next queryrangebase.Handler[R]) {
 	for data := range ch {
 
 		sp, ctx := opentracing.StartSpanFromContext(ctx, "interval")
@@ -178,7 +178,7 @@ func (h *splitByInterval) loop(ctx context.Context, ch <-chan *lokiResult, next 
 	}
 }
 
-func (h *splitByInterval) Do(ctx context.Context, r queryrangebase.Request) (queryrangebase.Response, error) {
+func (h *splitByInterval[R]) Do(ctx context.Context, r R) (queryrangebase.Response, error) {
 	tenantIDs, err := tenant.TenantIDs(ctx)
 	if err != nil {
 		return nil, httpgrpc.Errorf(http.StatusBadRequest, err.Error())
@@ -211,7 +211,7 @@ func (h *splitByInterval) Do(ctx context.Context, r queryrangebase.Request) (que
 	}
 
 	var limit int64
-	switch req := r.(type) {
+	switch req := any(r).(type) {
 	case *LokiRequest:
 		limit = int64(req.Limit)
 		if req.Direction == logproto.BACKWARD {
@@ -226,9 +226,9 @@ func (h *splitByInterval) Do(ctx context.Context, r queryrangebase.Request) (que
 		return nil, httpgrpc.Errorf(http.StatusBadRequest, "unknown request type")
 	}
 
-	input := make([]*lokiResult, 0, len(intervals))
+	input := make([]*lokiResult[R], 0, len(intervals))
 	for _, interval := range intervals {
-		input = append(input, &lokiResult{
+		input = append(input, &lokiResult[R]{
 			req: interval,
 			ch:  make(chan *packedResp),
 		})

@@ -105,7 +105,7 @@ func NewVolumeCacheMiddleware(
 	retentionEnabled bool,
 	transformer UserIDTransformer,
 	metrics *queryrangebase.ResultsCacheMetrics,
-) (queryrangebase.Middleware, error) {
+) (queryrangebase.Middleware[queryrangebase.Request], error) {
 	return queryrangebase.NewResultsCacheMiddleware(
 		log,
 		c,

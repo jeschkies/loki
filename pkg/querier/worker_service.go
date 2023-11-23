@@ -54,7 +54,7 @@ func (cfg WorkerServiceConfig) QuerierRunningStandalone() bool {
 func InitWorkerService(
 	cfg WorkerServiceConfig,
 	reg prometheus.Registerer,
-	handler queryrangebase.Handler,
+	handler queryrangebase.Handler[queryrangebase.Request],
 	codec querier_worker.RequestCodec,
 ) (serve services.Service, err error) {
 

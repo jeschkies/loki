@@ -32,7 +32,7 @@ const (
 
 type DownstreamHandler struct {
 	limits Limits
-	next   queryrangebase.Handler
+	next   queryrangebase.Handler[queryrangebase.Request]
 }
 
 func ParamsToLokiRequest(params logql.Params) queryrangebase.Request {

@@ -61,35 +61,35 @@ func (cfg *Config) Validate() error {
 }
 
 // HandlerFunc is like http.HandlerFunc, but for Handler.
-type HandlerFunc func(context.Context, Request) (Response, error)
+type HandlerFunc[R Request] func(context.Context, R) (Response, error)
 
 // Do implements Handler.
-func (q HandlerFunc) Do(ctx context.Context, req Request) (Response, error) {
+func (q HandlerFunc[R]) Do(ctx context.Context, req R) (Response, error) {
 	return q(ctx, req)
 }
 
 // Handler is like http.Handle, but specifically for Prometheus query_range calls.
-type Handler interface {
-	Do(context.Context, Request) (Response, error)
+type Handler[R Request] interface {
+	Do(context.Context, R) (Response, error)
 }
 
 // MiddlewareFunc is like http.HandlerFunc, but for Middleware.
-type MiddlewareFunc func(Handler) Handler
+type MiddlewareFunc[R Request] func(Handler[R]) Handler[R]
 
 // Wrap implements Middleware.
-func (q MiddlewareFunc) Wrap(h Handler) Handler {
+func (q MiddlewareFunc[R]) Wrap(h Handler[R]) Handler[R] {
 	return q(h)
 }
 
 // Middleware is a higher order Handler.
-type Middleware interface {
-	Wrap(Handler) Handler
+type Middleware[R Request] interface {
+	Wrap(Handler[R]) Handler[R]
 }
 
 // MergeMiddlewares produces a middleware that applies multiple middleware in turn;
 // ie Merge(f,g,h).Wrap(handler) == f.Wrap(g.Wrap(h.Wrap(handler)))
-func MergeMiddlewares(middleware ...Middleware) Middleware {
-	return MiddlewareFunc(func(next Handler) Handler {
+func MergeMiddlewares[R Request](middleware ...Middleware[R]) Middleware[R] {
+	return MiddlewareFunc[R](func(next Handler[R]) Handler[R] {
 		for i := len(middleware) - 1; i >= 0; i-- {
 			next = middleware[i].Wrap(next)
 		}

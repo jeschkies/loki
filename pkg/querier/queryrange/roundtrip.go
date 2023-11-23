@@ -106,7 +106,7 @@ func NewMiddleware(
 	retentionEnabled bool,
 	registerer prometheus.Registerer,
 	metricsNamespace string,
-) (base.Middleware, Stopper, error) {
+) (base.Middleware[base.Request], Stopper, error) {
 	metrics := NewMetrics(registerer, metricsNamespace)
 
 	var (
@@ -197,7 +197,7 @@ func NewMiddleware(
 		return nil, nil, err
 	}
 
-	return base.MiddlewareFunc(func(next base.Handler) base.Handler {
+	return base.MiddlewareFunc[base.Request](func(next base.Handler[base.Request]) base.Handler[base.Request] {
 		var (
 			metricRT       = metricsTripperware.Wrap(next)
 			limitedRT      = limitedTripperware.Wrap(next)
@@ -216,13 +216,18 @@ func NewMiddleware(
 type roundTripper struct {
 	logger log.Logger
 
-	next, limited, log, metric, series, labels, instantMetric, indexStats, seriesVolume base.Handler
+	instantMetric base.Handler[*LokiInstantRequest]
+	labels base.Handler[*LabelRequest]
+	log, metric base.Handler[*LokiRequest]
+	next, limited, indexStats base.Handler[base.Request]
+	series base.Handler[*LokiSeriesRequest]
+	seriesVolume base.Handler[*logproto.VolumeRequest]
 
 	limits Limits
 }
 
 // newRoundTripper creates a new queryrange roundtripper
-func newRoundTripper(logger log.Logger, next, limited, log, metric, series, labels, instantMetric, indexStats, seriesVolume base.Handler, limits Limits) roundTripper {
+func newRoundTripper(logger log.Logger, next, limited base.Handler[base.Request], log, metric base.Handler[*LokiRequest], series base.Handler[*LokiSeriesRequest], labels base.Handler[*LabelRequest], instantMetric base.Handler[*LokiInstantRequest], indexStats base.Handler[base.Request], seriesVolume base.Handler[*logproto.VolumeRequest], limits Limits) roundTripper {
 	return roundTripper{
 		logger:        logger,
 		limited:       limited,
@@ -275,7 +280,7 @@ func (r roundTripper) Do(ctx context.Context, req base.Request) (base.Response, 
 					return nil, httpgrpc.Errorf(http.StatusBadRequest, err.Error())
 				}
 			}
-			return r.metric.Do(ctx, req)
+			return r.metric.Do(ctx, op)
 		case syntax.LogSelectorExpr:
 			if err := validateMaxEntriesLimits(ctx, op.Limit, r.limits); err != nil {
 				return nil, httpgrpc.Errorf(http.StatusBadRequest, err.Error())
@@ -289,7 +294,7 @@ func (r roundTripper) Do(ctx context.Context, req base.Request) (base.Response, 
 			if !e.HasFilter() {
 				return r.limited.Do(ctx, req)
 			}
-			return r.log.Do(ctx, req)
+			return r.log.Do(ctx, op)
 
 		default:
 			return r.next.Do(ctx, req)
@@ -297,11 +302,11 @@ func (r roundTripper) Do(ctx context.Context, req base.Request) (base.Response, 
 	case *LokiSeriesRequest:
 		level.Info(logger).Log("msg", "executing query", "type", "series", "match", logql.PrintMatches(op.Match), "length", op.EndTs.Sub(op.StartTs))
 
-		return r.series.Do(ctx, req)
+		return r.series.Do(ctx, op)
 	case *LabelRequest:
 		level.Info(logger).Log("msg", "executing query", "type", "labels", "label", op.Name, "length", op.LabelRequest.End.Sub(*op.LabelRequest.Start), "query", op.Query)
 
-		return r.labels.Do(ctx, req)
+		return r.labels.Do(ctx, op)
 	case *LokiInstantRequest:
 		expr, err := syntax.ParseExpr(op.Query)
 		if err != nil {
@@ -313,7 +318,7 @@ func (r roundTripper) Do(ctx context.Context, req base.Request) (base.Response, 
 
 		switch expr.(type) {
 		case syntax.SampleExpr:
-			return r.instantMetric.Do(ctx, req)
+			return r.instantMetric.Do(ctx, op)
 		default:
 			return r.next.Do(ctx, req)
 		}
@@ -332,7 +337,7 @@ func (r roundTripper) Do(ctx context.Context, req base.Request) (base.Response, 
 			"aggregate_by", op.AggregateBy,
 		)
 
-		return r.seriesVolume.Do(ctx, req)
+		return r.seriesVolume.Do(ctx, op)
 	default:
 		return r.next.Do(ctx, req)
 	}
@@ -398,10 +403,10 @@ func NewLogFilterTripperware(
 	merger base.Merger,
 	c cache.Cache,
 	metrics *Metrics,
-	indexStatsTripperware base.Middleware,
+	indexStatsTripperware base.Middleware[*LokiRequest],
 	metricsNamespace string,
-) (base.Middleware, error) {
-	return base.MiddlewareFunc(func(next base.Handler) base.Handler {
+) (base.Middleware[*LokiRequest], error) {
+	return base.MiddlewareFunc[*LokiRequest](func(next base.Handler[*LokiRequest]) base.Handler[*LokiRequest] {
 		statsHandler := indexStatsTripperware.Wrap(next)
 
 		queryRangeMiddleware := []base.Middleware{
@@ -509,15 +514,15 @@ func NewSeriesTripperware(
 	schema config.SchemaConfig,
 	merger base.Merger,
 	metricsNamespace string,
-) (base.Middleware, error) {
-	queryRangeMiddleware := []base.Middleware{
-		StatsCollectorMiddleware(),
+) (base.Middleware[*LokiSeriesRequest], error) {
+	queryRangeMiddleware := []base.Middleware[*LokiSeriesRequest]{
+		StatsCollectorMiddleware[*LokiSeriesRequest](),
 		NewLimitsMiddleware(limits),
 		base.InstrumentMiddleware("split_by_interval", metrics.InstrumentMiddlewareMetrics),
 		// The Series API needs to pull one chunk per series to extract the label set, which is much cheaper than iterating through all matching chunks.
 		// Force a 24 hours split by for series API, this will be more efficient with our static daily bucket storage.
 		// This would avoid queriers downloading chunks for same series over and over again for serving smaller queries.
-		SplitByIntervalMiddleware(schema.Configs, WithSplitByLimits(limits, 24*time.Hour), merger, splitByTime, metrics.SplitByMetrics),
+		SplitByIntervalMiddleware[*LokiSeriesRequest](schema.Configs, WithSplitByLimits(limits, 24*time.Hour), merger, splitByTime, metrics.SplitByMetrics),
 	}
 
 	if cfg.MaxRetries > 0 {
@@ -716,8 +721,8 @@ func NewInstantMetricTripperware(
 	metrics *Metrics,
 	indexStatsTripperware base.Middleware,
 	metricsNamespace string,
-) (base.Middleware, error) {
-	return base.MiddlewareFunc(func(next base.Handler) base.Handler {
+) (base.Middleware[*LokiInstantRequest], error) {
+	return base.MiddlewareFunc[*LokiInstantRequest](func(next base.Handler[*LokiInstantRequest]) base.Handler[*LokiInstantRequest] {
 		statsHandler := indexStatsTripperware.Wrap(next)
 
 		queryRangeMiddleware := []base.Middleware{
@@ -768,7 +773,7 @@ func NewVolumeTripperware(
 	retentionEnabled bool,
 	metrics *Metrics,
 	metricsNamespace string,
-) (base.Middleware, error) {
+) (base.Middleware[*logproto.VolumeRequest], error) {
 	// Parallelize the volume requests, so it doesn't send a huge request to a single index-gw (i.e. {app=~".+"} for 30d).
 	// Indices are sharded by 24 hours, so we split the volume request in 24h intervals.
 	limits = WithSplitByLimits(limits, 24*time.Hour)
@@ -824,10 +829,10 @@ func NewVolumeTripperware(
 	), nil
 }
 
-func statsTripperware(nextTW base.Middleware) base.Middleware {
-	return base.MiddlewareFunc(func(next base.Handler) base.Handler {
-		return base.HandlerFunc(func(ctx context.Context, r base.Request) (base.Response, error) {
-			cacheMiddlewares := []base.Middleware{
+func statsTripperware(nextTW base.Middleware[base.Request]) base.Middleware[base.Request] {
+	return base.MiddlewareFunc[base.Request](func(next base.Handler[base.Request]) base.Handler[base.Request] {
+		return base.HandlerFunc[base.Request](func(ctx context.Context, r base.Request) (base.Response, error) {
+			cacheMiddlewares := []base.Middleware[base.Request]{
 				StatsCollectorMiddleware(),
 				nextTW,
 			}
@@ -840,10 +845,10 @@ func statsTripperware(nextTW base.Middleware) base.Middleware {
 	})
 }
 
-func volumeRangeTripperware(nextTW base.Middleware) base.Middleware {
-	return base.MiddlewareFunc(func(next base.Handler) base.Handler {
-		return base.HandlerFunc(func(ctx context.Context, r base.Request) (base.Response, error) {
-			seriesVolumeMiddlewares := []base.Middleware{
+func volumeRangeTripperware(nextTW base.Middleware[*logproto.VolumeRequest]) base.Middleware[*logproto.VolumeRequest] {
+	return base.MiddlewareFunc[*logproto.VolumeRequest](func(next base.Handler[*logproto.VolumeRequest]) base.Handler[*logproto.VolumeRequest] {
+		return base.HandlerFunc[*logproto.VolumeRequest](func(ctx context.Context, r *logproto.VolumeRequest) (base.Response, error) {
+			seriesVolumeMiddlewares := []base.Middleware[*logproto.VolumeRequest]{
 				StatsCollectorMiddleware(),
 				NewVolumeMiddleware(),
 				nextTW,
@@ -857,10 +862,10 @@ func volumeRangeTripperware(nextTW base.Middleware) base.Middleware {
 	})
 }
 
-func volumeFeatureFlagRoundTripper(nextTW base.Middleware, limits Limits) base.Middleware {
-	return base.MiddlewareFunc(func(next base.Handler) base.Handler {
+func volumeFeatureFlagRoundTripper(nextTW base.Middleware[*logproto.VolumeRequest], limits Limits) base.Middleware[*logproto.VolumeRequest] {
+	return base.MiddlewareFunc[*logproto.VolumeRequest](func(next base.Handler[*logproto.VolumeRequest]) base.Handler[*logproto.VolumeRequest] {
 		nextRt := nextTW.Wrap(next)
-		return base.HandlerFunc(func(ctx context.Context, r base.Request) (base.Response, error) {
+		return base.HandlerFunc[*logproto.VolumeRequest](func(ctx context.Context, r *logproto.VolumeRequest) (base.Response, error) {
 			userID, err := user.ExtractOrgID(ctx)
 			if err != nil {
 				return nil, err
@@ -886,12 +891,12 @@ func NewIndexStatsTripperware(
 	retentionEnabled bool,
 	metrics *Metrics,
 	metricsNamespace string,
-) (base.Middleware, error) {
+) (base.Middleware[base.Request], error) {
 	// Parallelize the index stats requests, so it doesn't send a huge request to a single index-gw (i.e. {app=~".+"} for 30d).
 	// Indices are sharded by 24 hours, so we split the stats request in 24h intervals.
 	limits = WithSplitByLimits(limits, 24*time.Hour)
 
-	var cacheMiddleware base.Middleware
+	var cacheMiddleware base.Middleware[base.Request]
 	if cfg.CacheIndexStatsResults {
 		var err error
 		cacheMiddleware, err = NewIndexStatsCacheMiddleware(

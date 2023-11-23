@@ -7,14 +7,14 @@ import (
 
 // StepAlignMiddleware aligns the start and end of request to the step to
 // improved the cacheability of the query results.
-var StepAlignMiddleware = MiddlewareFunc(func(next Handler) Handler {
+var StepAlignMiddleware = MiddlewareFunc[Request](func(next Handler[Request]) Handler[Request] {
 	return stepAlign{
 		next: next,
 	}
 })
 
 type stepAlign struct {
-	next Handler
+	next Handler[Request]
 }
 
 func (s stepAlign) Do(ctx context.Context, r Request) (Response, error) {

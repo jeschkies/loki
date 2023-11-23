@@ -94,7 +94,7 @@ type Frontend struct {
 	codec transport.Codec
 }
 
-var _ queryrangebase.Handler = &Frontend{}
+var _ queryrangebase.Handler[queryrangebase.Request] = &Frontend{}
 var _ transport.GrpcRoundTripper = &Frontend{}
 
 type ResponseTuple = struct {

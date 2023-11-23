@@ -432,25 +432,24 @@ func (sl *seriesLimiter) isLimitReached() bool {
 	return len(sl.hashes) > sl.maxSeries
 }
 
-type limitedRoundTripper struct {
+type limitedRoundTripper[R queryrangebase.Request] struct {
 	configs []config.PeriodConfig
-	next    queryrangebase.Handler
+	next    queryrangebase.Handler[R]
 	limits  Limits
 
-	middleware queryrangebase.Middleware
+	middleware queryrangebase.Middleware[R]
 }
 
-var _ queryrangebase.Handler = limitedRoundTripper{}
+var _ queryrangebase.Handler[queryrangebase.Request] = limitedRoundTripper[queryrangebase.Request]{}
 
 // NewLimitedRoundTripper creates a new roundtripper that enforces MaxQueryParallelism to the `next` roundtripper across `middlewares`.
-func NewLimitedRoundTripper(next queryrangebase.Handler, limits Limits, configs []config.PeriodConfig, middlewares ...queryrangebase.Middleware) queryrangebase.Handler {
-	transport := limitedRoundTripper{
+func NewLimitedRoundTripper[R queryrangebase.Request](next queryrangebase.Handler[R], limits Limits, configs []config.PeriodConfig, middlewares ...queryrangebase.Middleware[R]) queryrangebase.Handler[R] {
+	return limitedRoundTripper[R]{
 		configs:    configs,
 		next:       next,
 		limits:     limits,
 		middleware: queryrangebase.MergeMiddlewares(middlewares...),
 	}
-	return transport
 }
 
 type SemaphoreWithTiming struct {
@@ -474,7 +473,7 @@ func (s *SemaphoreWithTiming) Acquire(ctx context.Context, n int64) (time.Durati
 	return time.Since(start), nil
 }
 
-func (rt limitedRoundTripper) Do(c context.Context, request queryrangebase.Request) (queryrangebase.Response, error) {
+func (rt limitedRoundTripper[R]) Do(c context.Context, request R) (queryrangebase.Response, error) {
 	var (
 		ctx, cancel = context.WithCancel(c)
 	)
@@ -509,7 +508,7 @@ func (rt limitedRoundTripper) Do(c context.Context, request queryrangebase.Reque
 	semWithTiming := NewSemaphoreWithTiming(int64(parallelism))
 
 	return rt.middleware.Wrap(
-		queryrangebase.HandlerFunc(func(ctx context.Context, r queryrangebase.Request) (queryrangebase.Response, error) {
+		queryrangebase.HandlerFunc[R](func(ctx context.Context, r R) (queryrangebase.Response, error) {
 			// This inner handler is called multiple times by
 			// sharding outer middlewares such as the downstreamer.
 			// The number of concurrent calls to `next.RoundTrip` should

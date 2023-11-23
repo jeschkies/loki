@@ -848,7 +848,7 @@ func TestResultsCacheMaxFreshness(t *testing.T) {
 	modelNow := model.Now()
 	for i, tc := range []struct {
 		fakeLimits       Limits
-		Handler          HandlerFunc
+		Handler          HandlerFunc[Request]
 		expectedResponse *PrometheusResponse
 	}{
 		{
@@ -859,7 +859,7 @@ func TestResultsCacheMaxFreshness(t *testing.T) {
 		{
 			// should not lookup cache because per-tenant override will be applied
 			fakeLimits: mockLimits{maxCacheFreshness: 10 * time.Minute},
-			Handler: HandlerFunc(func(_ context.Context, _ Request) (Response, error) {
+			Handler: HandlerFunc[Request](func(_ context.Context, _ Request) (Response, error) {
 				return parsedResponse, nil
 			}),
 			expectedResponse: parsedResponse,

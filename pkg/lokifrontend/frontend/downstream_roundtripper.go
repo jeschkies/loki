@@ -20,7 +20,7 @@ type downstreamRoundTripper struct {
 	codec         queryrangebase.Codec
 }
 
-func NewDownstreamRoundTripper(downstreamURL string, transport http.RoundTripper) (queryrangebase.Handler, error) {
+func NewDownstreamRoundTripper(downstreamURL string, transport http.RoundTripper) (queryrangebase.Handler[queryrangebase.Request], error) {
 	u, err := url.Parse(downstreamURL)
 	if err != nil {
 		return nil, err

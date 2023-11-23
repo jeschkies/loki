@@ -11,13 +11,13 @@ type RequestResponse struct {
 }
 
 // DoRequests executes a list of requests in parallel.
-func DoRequests(ctx context.Context, downstream Handler, reqs []Request, parallelism int) ([]RequestResponse, error) {
+func DoRequests[R Request](ctx context.Context, downstream Handler[R], reqs []R, parallelism int) ([]RequestResponse, error) {
 	// If one of the requests fail, we want to be able to cancel the rest of them.
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	// Feed all requests to a bounded intermediate channel to limit parallelism.
-	intermediate := make(chan Request)
+	intermediate := make(chan R)
 	go func() {
 		for _, req := range reqs {
 			intermediate <- req

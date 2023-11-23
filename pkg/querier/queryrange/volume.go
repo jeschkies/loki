@@ -19,16 +19,11 @@ import (
 	"github.com/grafana/loki/pkg/util"
 )
 
-func NewVolumeMiddleware() queryrangebase.Middleware {
-	return queryrangebase.MiddlewareFunc(func(next queryrangebase.Handler) queryrangebase.Handler {
-		return queryrangebase.HandlerFunc(func(ctx context.Context, req queryrangebase.Request) (queryrangebase.Response, error) {
-			volReq, ok := req.(*logproto.VolumeRequest)
+func NewVolumeMiddleware() queryrangebase.Middleware[*logproto.VolumeRequest] {
+	return queryrangebase.MiddlewareFunc[*logproto.VolumeRequest](func(next queryrangebase.Handler[*logproto.VolumeRequest]) queryrangebase.Handler[*logproto.VolumeRequest] {
+		return queryrangebase.HandlerFunc[*logproto.VolumeRequest](func(ctx context.Context, volReq *logproto.VolumeRequest) (queryrangebase.Response, error) {
 
-			if !ok {
-				return next.Do(ctx, req)
-			}
-
-			reqs := map[time.Time]queryrangebase.Request{}
+			reqs := map[time.Time]*logproto.VolumeRequest{}
 			startTS := volReq.From.Time()
 			endTS := volReq.Through.Time()
 			interval := time.Duration(volReq.Step * 1e6)
