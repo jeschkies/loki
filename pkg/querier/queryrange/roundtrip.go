@@ -409,12 +409,12 @@ func NewLogFilterTripperware(
 	return base.MiddlewareFunc[*LokiRequest](func(next base.Handler[*LokiRequest]) base.Handler[*LokiRequest] {
 		statsHandler := indexStatsTripperware.Wrap(next)
 
-		queryRangeMiddleware := []base.Middleware{
-			StatsCollectorMiddleware(),
+		queryRangeMiddleware := []base.Middleware[*LokiRequest]{
+			StatsCollectorMiddleware[*LokiRequest](),
 			NewLimitsMiddleware(limits),
 			NewQuerySizeLimiterMiddleware(schema.Configs, engineOpts, log, limits, statsHandler),
 			base.InstrumentMiddleware("split_by_interval", metrics.InstrumentMiddlewareMetrics),
-			SplitByIntervalMiddleware(schema.Configs, limits, merger, splitByTime, metrics.SplitByMetrics),
+			SplitByIntervalMiddleware[*LokiRequest](schema.Configs, limits, merger, splitByTime, metrics.SplitByMetrics),
 		}
 
 		if cfg.CacheResults {
@@ -829,11 +829,11 @@ func NewVolumeTripperware(
 	), nil
 }
 
-func statsTripperware(nextTW base.Middleware[base.Request]) base.Middleware[base.Request] {
-	return base.MiddlewareFunc[base.Request](func(next base.Handler[base.Request]) base.Handler[base.Request] {
-		return base.HandlerFunc[base.Request](func(ctx context.Context, r base.Request) (base.Response, error) {
-			cacheMiddlewares := []base.Middleware[base.Request]{
-				StatsCollectorMiddleware(),
+func statsTripperware(nextTW base.Middleware[*logproto.IndexStatsRequest]) base.Middleware[*logproto.IndexStatsRequest] {
+	return base.MiddlewareFunc[*logproto.IndexStatsRequest](func(next base.Handler[*logproto.IndexStatsRequest]) base.Handler[*logproto.IndexStatsRequest] {
+		return base.HandlerFunc[*logproto.IndexStatsRequest](func(ctx context.Context, r *logproto.IndexStatsRequest) (base.Response, error) {
+			cacheMiddlewares := []base.Middleware[*logproto.IndexStatsRequest]{
+				StatsCollectorMiddleware[*logproto.IndexStatsRequest](),
 				nextTW,
 			}
 
@@ -891,7 +891,7 @@ func NewIndexStatsTripperware(
 	retentionEnabled bool,
 	metrics *Metrics,
 	metricsNamespace string,
-) (base.Middleware[base.Request], error) {
+) (base.Middleware[*logproto.IndexStatsRequest], error) {
 	// Parallelize the index stats requests, so it doesn't send a huge request to a single index-gw (i.e. {app=~".+"} for 30d).
 	// Indices are sharded by 24 hours, so we split the stats request in 24h intervals.
 	limits = WithSplitByLimits(limits, 24*time.Hour)
@@ -945,7 +945,7 @@ func NewIndexStatsTripperware(
 }
 
 func sharedIndexTripperware(
-	cacheMiddleware base.Middleware,
+	cacheMiddleware base.Middleware[*logproto.IndexStatsRequest],
 	cfg Config,
 	merger base.Merger,
 	limits Limits,
@@ -953,12 +953,12 @@ func sharedIndexTripperware(
 	metrics *Metrics,
 	schema config.SchemaConfig,
 	metricsNamespace string,
-) (base.Middleware, error) {
-	return base.MiddlewareFunc(func(next base.Handler) base.Handler {
-		middlewares := []base.Middleware{
+) (base.Middleware[*logproto.IndexStatsRequest], error) {
+	return base.MiddlewareFunc[*logproto.IndexStatsRequest](func(next base.Handler[*logproto.IndexStatsRequest]) base.Handler[*logproto.IndexStatsRequest] {
+		middlewares := []base.Middleware[*logproto.IndexStatsRequest]{
 			NewLimitsMiddleware(limits),
 			base.InstrumentMiddleware("split_by_interval", metrics.InstrumentMiddlewareMetrics),
-			SplitByIntervalMiddleware(schema.Configs, limits, merger, splitByTime, metrics.SplitByMetrics),
+			SplitByIntervalMiddleware[*logproto.IndexStatsRequest](schema.Configs, limits, merger, splitByTime, metrics.SplitByMetrics),
 		}
 
 		if cacheMiddleware != nil {

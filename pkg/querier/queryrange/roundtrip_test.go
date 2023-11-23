@@ -1305,10 +1305,10 @@ func counterWithError(err error) (*int, base.Handler) {
 	})
 }
 
-func promqlResult(v parser.Value) (*int, base.Handler) {
+func promqlResult(v parser.Value) (*int, base.Handler[base.Request]) {
 	count := 0
 	var lock sync.Mutex
-	return &count, base.HandlerFunc(func(ctx context.Context, r base.Request) (base.Response, error) {
+	return &count, base.HandlerFunc[base.Request](func(ctx context.Context, r base.Request) (base.Response, error) {
 		lock.Lock()
 		defer lock.Unlock()
 		count++
@@ -1321,10 +1321,10 @@ func promqlResult(v parser.Value) (*int, base.Handler) {
 	})
 }
 
-func seriesResult(v logproto.SeriesResponse) (*int, base.Handler) {
+func seriesResult(v logproto.SeriesResponse) (*int, base.Handler[base.Request]) {
 	count := 0
 	var lock sync.Mutex
-	return &count, base.HandlerFunc(func(ctx context.Context, r base.Request) (base.Response, error) {
+	return &count, base.HandlerFunc[base.Request](func(ctx context.Context, r base.Request) (base.Response, error) {
 		lock.Lock()
 		defer lock.Unlock()
 		count++

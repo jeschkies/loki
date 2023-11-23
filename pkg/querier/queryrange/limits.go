@@ -28,6 +28,7 @@ import (
 	"github.com/grafana/loki/pkg/logql/syntax"
 	queryrange_limits "github.com/grafana/loki/pkg/querier/queryrange/limits"
 	"github.com/grafana/loki/pkg/querier/queryrange/queryrangebase"
+	"github.com/grafana/loki/pkg/ruler/base"
 	"github.com/grafana/loki/pkg/storage/config"
 	"github.com/grafana/loki/pkg/storage/stores/index/stats"
 	util_log "github.com/grafana/loki/pkg/util/log"
@@ -189,8 +190,8 @@ func (l limitsMiddleware) Do(ctx context.Context, r queryrangebase.Request) (que
 
 type querySizeLimiter struct {
 	logger            log.Logger
-	next              queryrangebase.Handler
-	statsHandler      queryrangebase.Handler
+	next              queryrangebase.Handler[queryrangebase.Request]
+	statsHandler      queryrangebase.Handler[*logproto.IndexStatsRequest]
 	cfg               []config.PeriodConfig
 	maxLookBackPeriod time.Duration
 	limitFunc         func(context.Context, string) int
@@ -198,13 +199,13 @@ type querySizeLimiter struct {
 }
 
 func newQuerySizeLimiter(
-	next queryrangebase.Handler,
+	next queryrangebase.Handler[*logproto.IndexStatsRequest],
 	cfg []config.PeriodConfig,
 	engineOpts logql.EngineOpts,
 	logger log.Logger,
 	limitFunc func(context.Context, string) int,
 	limitErrorTmpl string,
-	statsHandler ...queryrangebase.Handler,
+	statsHandler ...queryrangebase.Handler[*logproto.IndexStatsRequest],
 ) *querySizeLimiter {
 	q := &querySizeLimiter{
 		logger:            logger,
@@ -230,9 +231,9 @@ func NewQuerierSizeLimiterMiddleware(
 	engineOpts logql.EngineOpts,
 	logger log.Logger,
 	limits Limits,
-	statsHandler ...queryrangebase.Handler,
-) queryrangebase.Middleware {
-	return queryrangebase.MiddlewareFunc(func(next queryrangebase.Handler) queryrangebase.Handler {
+	statsHandler ...queryrangebase.Handler[*logproto.IndexStatsRequest],
+) queryrangebase.Middleware[queryrangebase.Request] {
+	return queryrangebase.MiddlewareFunc[queryrangebase.Request](func(next queryrangebase.Handler[queryrangebase.Request]) queryrangebase.Handler[queryrangebase.Request] {
 		return newQuerySizeLimiter(next, cfg, engineOpts, logger, limits.MaxQuerierBytesRead, limErrQuerierTooManyBytesTmpl, statsHandler...)
 	})
 }
@@ -244,9 +245,9 @@ func NewQuerySizeLimiterMiddleware(
 	engineOpts logql.EngineOpts,
 	logger log.Logger,
 	limits Limits,
-	statsHandler ...queryrangebase.Handler,
-) queryrangebase.Middleware {
-	return queryrangebase.MiddlewareFunc(func(next queryrangebase.Handler) queryrangebase.Handler {
+	statsHandler ...queryrangebase.Handler[*logproto.IndexStatsRequest],
+) queryrangebase.Middleware[*logproto.IndexStatsRequest] {
+	return queryrangebase.MiddlewareFunc[*logproto.IndexStatsRequest](func(next queryrangebase.Handler[*logproto.IndexStatsRequest]) queryrangebase.Handler[*logproto.IndexStatsRequest] {
 		return newQuerySizeLimiter(next, cfg, engineOpts, logger, limits.MaxQueryBytesRead, limErrQueryTooManyBytesTmpl, statsHandler...)
 	})
 }

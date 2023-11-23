@@ -97,7 +97,7 @@ func NewIndexStatsCacheMiddleware(
 	retentionEnabled bool,
 	transformer UserIDTransformer,
 	metrics *queryrangebase.ResultsCacheMetrics,
-) (queryrangebase.Middleware, error) {
+) (queryrangebase.Middleware[*logproto.IndexStatsRequest], error) {
 	return queryrangebase.NewResultsCacheMiddleware(
 		log,
 		c,
