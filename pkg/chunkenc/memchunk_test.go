@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -14,6 +15,8 @@ import (
 	"time"
 
 	"github.com/dustin/go-humanize"
+	"github.com/golang/snappy"
+	"github.com/pierrec/lz4/v4"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -1966,4 +1969,63 @@ func TestMemChunk_IteratorWithStructuredMetadata(t *testing.T) {
 			}
 		})
 	}
+}
+
+func BenchmarkCompression(b *testing.B) {
+	file, err := os.ReadFile("testdata/small_access.log")
+	require.NoError(b, err)
+
+	var dst bytes.Buffer
+	decBuf := make([]byte, 0, len(file))
+	sw := snappy.NewWriter(&dst)
+	b.Run("snappy-compress", func(b *testing.B) {
+		b.ReportAllocs()
+		b.ResetTimer()
+		for n := 0; n < b.N; n++ {
+			dst.Reset()
+			_, err = sw.Write(file)
+			require.NoError(b, err)
+		}
+	})
+
+	dst.Reset()
+	_, err = snappy.NewBufferedWriter(&dst).Write(file)
+	require.NoError(b, err)
+	encoded := dst.String()
+	sr := snappy.NewReader(nil)
+	b.Run("snappy-decompress", func(b *testing.B) {
+		b.ReportAllocs()
+		b.ResetTimer()
+		for n := 0; n < b.N; n++ {
+			sr.Reset(strings.NewReader(encoded))
+			_, err = sr.Read(decBuf)
+			require.NoError(b, err)
+		}
+	})
+
+	zw := lz4.NewWriter(&dst)
+	b.Run("lz4-compress", func(b *testing.B) {
+		b.ReportAllocs()
+		b.ResetTimer()
+		for n := 0; n < b.N; n++ {
+			dst.Reset()
+			_, err = zw.Write(file)
+			require.NoError(b, err)
+		}
+	})
+
+	dst.Reset()
+	_, err = lz4.NewWriter(&dst).Write(file)
+	require.NoError(b, err)
+	encoded = dst.String()
+	zr := lz4.NewReader(nil)
+	b.Run("lz4-decompress", func(b *testing.B) {
+		b.ReportAllocs()
+		b.ResetTimer()
+		for n := 0; n < b.N; n++ {
+			zr.Reset(strings.NewReader(encoded))
+			_, err = zr.Read(decBuf)
+			require.NoError(b, err)
+		}
+	})
 }
