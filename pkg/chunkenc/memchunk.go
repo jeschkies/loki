@@ -196,6 +196,7 @@ func (hb *headBlock) Append(ts int64, line string, _ labels.Labels) error {
 	return nil
 }
 
+// TODO: support columnar format
 func (hb *headBlock) Serialise(pool WriterPool) ([]byte, error) {
 	inBuf := serializeBytesBufferPool.Get().(*bytes.Buffer)
 	defer func() {
@@ -291,6 +292,7 @@ func (hb *headBlock) CheckpointTo(w io.Writer) error {
 	return nil
 }
 
+// TODO: support columnar loading.
 func (hb *headBlock) LoadBytes(b []byte) error {
 	if len(b) < 1 {
 		return nil
