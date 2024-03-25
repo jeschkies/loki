@@ -1975,6 +1975,7 @@ func BenchmarkCompression(b *testing.B) {
 	file, err := os.ReadFile("testdata/small_access.log")
 	require.NoError(b, err)
 
+	// TODO: encode block
 	var dst bytes.Buffer
 	decBuf := make([]byte, 0, len(file))
 	sw := snappy.NewWriter(&dst)

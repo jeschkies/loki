@@ -16,6 +16,7 @@ import (
 	"github.com/go-kit/log/level"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
+	"github.com/ronanh/intcomp"
 
 	"github.com/grafana/loki/pkg/iter"
 	"github.com/grafana/loki/pkg/logproto"
@@ -205,18 +206,37 @@ func (hb *headBlock) Serialise(pool WriterPool) ([]byte, error) {
 	}()
 	outBuf := &bytes.Buffer{}
 
-	encBuf := make([]byte, binary.MaxVarintLen64)
+	//encBuf := make([]byte, binary.MaxVarintLen64)
 	compressedWriter := pool.GetWriter(outBuf)
 	defer pool.PutWriter(compressedWriter)
+
+	timestamps := make([]int64, 0, len(hb.entries))
+	offsets := make([]int64, 0, len(hb.entries))
+
+	curOffset := 0
 	for _, logEntry := range hb.entries {
-		n := binary.PutVarint(encBuf, logEntry.t)
-		inBuf.Write(encBuf[:n])
-
-		n = binary.PutUvarint(encBuf, uint64(len(logEntry.s)))
-		inBuf.Write(encBuf[:n])
-
+		timestamps = append(timestamps, logEntry.t)
+		// offsets is always on ahead
+		curOffset += len(logEntry.s)
+		offsets = append(offsets, int64(curOffset))
 		inBuf.WriteString(logEntry.s)
+
+		/*
+			n := binary.PutVarint(encBuf, logEntry.t)
+			inBuf.Write(encBuf[:n])
+
+			n = binary.PutUvarint(encBuf, uint64(len(logEntry.s)))
+			inBuf.Write(encBuf[:n])
+
+			inBuf.WriteString(logEntry.s)
+		*/
 	}
+
+	outTs := make([]uint64, len(timestamps))
+	outTs = intcomp.CompressDeltaVarByteInt64(timestamps, outTs)
+
+	outOff := make([]uint64, len(offsets))
+	outOff = intcomp.CompressDeltaVarByteInt64(offsets, outOff)
 
 	if _, err := compressedWriter.Write(inBuf.Bytes()); err != nil {
 		return nil, errors.Wrap(err, "appending entry")

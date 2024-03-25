@@ -1363,6 +1363,9 @@ github.com/rcrowley/go-metrics
 github.com/richardartoul/molecule
 github.com/richardartoul/molecule/src/codec
 github.com/richardartoul/molecule/src/protowire
+# github.com/ronanh/intcomp v1.1.0
+## explicit; go 1.19
+github.com/ronanh/intcomp
 # github.com/rs/xid v1.5.0
 ## explicit; go 1.12
 github.com/rs/xid

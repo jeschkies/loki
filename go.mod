@@ -131,6 +131,7 @@ require (
 	github.com/prometheus/alertmanager v0.27.0
 	github.com/prometheus/common/sigv4 v0.1.0
 	github.com/richardartoul/molecule v1.0.0
+	github.com/ronanh/intcomp v1.1.0
 	github.com/thanos-io/objstore v0.0.0-20230829152104-1b257a36f9a3
 	github.com/willf/bloom v2.0.3+incompatible
 	go.opentelemetry.io/collector/pdata v1.3.0
