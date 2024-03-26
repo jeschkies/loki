@@ -357,6 +357,7 @@ func (hb *unorderedHeadBlock) SampleIterator(
 	})
 }
 
+// TODO: check if this needs to be adapted.
 // nolint:unused
 // serialise is used in creating an ordered, compressed block from an unorderedHeadBlock
 func (hb *unorderedHeadBlock) Serialise(pool WriterPool) ([]byte, error) {
