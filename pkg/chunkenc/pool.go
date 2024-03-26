@@ -72,6 +72,12 @@ var (
 		},
 	}
 
+	serializeIntsBufferPool = sync.Pool{
+		New: func() interface{} {
+			return make([]uint64, 0, 2048)
+		},
+	}
+
 	// EncodeBufferPool is a pool used to binary encode.
 	EncodeBufferPool = sync.Pool{
 		New: func() interface{} {

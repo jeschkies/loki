@@ -206,7 +206,7 @@ func (hb *headBlock) Serialise(pool WriterPool) ([]byte, error) {
 	}()
 	outBuf := &bytes.Buffer{}
 
-	//encBuf := make([]byte, binary.MaxVarintLen64)
+	encBuf := make([]byte, binary.MaxVarintLen64)
 	compressedWriter := pool.GetWriter(outBuf)
 	defer pool.PutWriter(compressedWriter)
 
@@ -232,11 +232,29 @@ func (hb *headBlock) Serialise(pool WriterPool) ([]byte, error) {
 		*/
 	}
 
-	outTs := make([]uint64, len(timestamps))
-	outTs = intcomp.CompressDeltaVarByteInt64(timestamps, outTs)
+	out := serializeIntsBufferPool.Get().([]uint64)
+	defer func() {
+		out = out[0:0]
+		serializeIntsBufferPool.Put(out)
+	}()
+	out = intcomp.CompressDeltaVarByteInt64(timestamps, out)
+	n := binary.PutUvarint(encBuf, uint64(len(out)))
+	outBuf.Write(encBuf[:n])
+	for _, x := range out {
+		n := binary.PutUvarint(encBuf, x)
+		outBuf.Write(encBuf[:n])
+	}
 
-	outOff := make([]uint64, len(offsets))
-	outOff = intcomp.CompressDeltaVarByteInt64(offsets, outOff)
+	out = intcomp.CompressDeltaVarByteInt64(offsets, out)
+	n = binary.PutUvarint(encBuf, uint64(len(out)))
+	outBuf.Write(encBuf[:n])
+	for _, x := range out {
+		n := binary.PutUvarint(encBuf, x)
+		outBuf.Write(encBuf[:n])
+	}
+
+	n = binary.PutUvarint(encBuf, uint64(inBuf.Len()))
+	outBuf.Write(encBuf[:n])
 
 	if _, err := compressedWriter.Write(inBuf.Bytes()); err != nil {
 		return nil, errors.Wrap(err, "appending entry")
