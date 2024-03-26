@@ -90,12 +90,31 @@ func (p *processor) processBlocks(ctx context.Context, data []blockWithTasks) er
 	}
 
 	start := time.Now()
-	bqs, err := p.store.FetchBlocks(ctx, refs, bloomshipper.WithFetchAsync(true), bloomshipper.WithIgnoreNotFound(true))
+	bqs, err := p.store.FetchBlocks(
+		ctx,
+		refs,
+		bloomshipper.WithFetchAsync(true),
+		bloomshipper.WithIgnoreNotFound(true),
+		// NB(owen-d): we relinquish bloom pages to a pool
+		// after iteration for performance (alloc reduction).
+		// This is safe to do here because we do not capture
+		// the underlying bloom []byte outside of iteration
+		bloomshipper.WithPool(true),
+	)
 	level.Debug(p.logger).Log("msg", "fetch blocks", "count", len(bqs), "duration", time.Since(start), "err", err)
 
 	if err != nil {
 		return err
 	}
+
+	defer func() {
+		for i := range bqs {
+			if bqs[i] == nil {
+				continue
+			}
+			bqs[i].Close()
+		}
+	}()
 
 	return concurrency.ForEachJob(ctx, len(bqs), p.concurrency, func(ctx context.Context, i int) error {
 		bq := bqs[i]
@@ -103,7 +122,6 @@ func (p *processor) processBlocks(ctx context.Context, data []blockWithTasks) er
 			// TODO(chaudum): Add metric for skipped blocks
 			return nil
 		}
-		defer bq.Close()
 
 		block := data[i]
 		level.Debug(p.logger).Log(
