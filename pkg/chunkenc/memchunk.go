@@ -207,7 +207,7 @@ func (hb *headBlock) Serialise(pool WriterPool) ([]byte, error) {
 	outBuf := &bytes.Buffer{}
 
 	encBuf := make([]byte, binary.MaxVarintLen64)
-	compressedWriter := pool.GetWriter(outBuf)
+	compressedWriter := pool.GetWriter(inBuf)
 	defer pool.PutWriter(compressedWriter)
 
 	timestamps := make([]int64, 0, len(hb.entries))
@@ -219,7 +219,10 @@ func (hb *headBlock) Serialise(pool WriterPool) ([]byte, error) {
 		// offsets is always on ahead
 		curOffset += len(logEntry.s)
 		offsets = append(offsets, int64(curOffset))
-		inBuf.WriteString(logEntry.s)
+
+		// TODO: might not be very efficient.
+		compressedWriter.Write([]byte(logEntry.s))
+		//inBuf.WriteString(logEntry.s)
 
 		/*
 			n := binary.PutVarint(encBuf, logEntry.t)
@@ -255,10 +258,13 @@ func (hb *headBlock) Serialise(pool WriterPool) ([]byte, error) {
 
 	n = binary.PutUvarint(encBuf, uint64(inBuf.Len()))
 	outBuf.Write(encBuf[:n])
+	outBuf.Write(inBuf.Bytes())
 
-	if _, err := compressedWriter.Write(inBuf.Bytes()); err != nil {
-		return nil, errors.Wrap(err, "appending entry")
-	}
+	/*
+		if _, err := compressedWriter.Write(inBuf.Bytes()); err != nil {
+			return nil, errors.Wrap(err, "appending entry")
+		}
+	*/
 	if err := compressedWriter.Close(); err != nil {
 		return nil, errors.Wrap(err, "flushing pending compress buffer")
 	}
@@ -330,7 +336,7 @@ func (hb *headBlock) CheckpointTo(w io.Writer) error {
 	return nil
 }
 
-// TODO: support columnar loading.
+// TODO: support columnar loading. This is only used by unordered and the WAL it seems.
 func (hb *headBlock) LoadBytes(b []byte) error {
 	if len(b) < 1 {
 		return nil
@@ -1193,14 +1199,14 @@ func (b encBlock) Iterator(ctx context.Context, pipeline log.StreamPipeline) ite
 	if len(b.b) == 0 {
 		return iter.NoopIterator
 	}
-	return newEntryIterator(ctx, GetReaderPool(b.enc), b.b, pipeline, b.format, b.symbolizer)
+	return newBlockEntryIterator(ctx, GetReaderPool(b.enc), b.b, pipeline, b.format, b.symbolizer)
 }
 
 func (b encBlock) SampleIterator(ctx context.Context, extractor log.StreamSampleExtractor) iter.SampleIterator {
 	if len(b.b) == 0 {
 		return iter.NoopIterator
 	}
-	return newSampleIterator(ctx, GetReaderPool(b.enc), b.b, b.format, extractor, b.symbolizer)
+	return newBlockSampleIterator(ctx, GetReaderPool(b.enc), b.b, b.format, extractor, b.symbolizer)
 }
 
 func (b block) Offset() int {
@@ -1629,14 +1635,6 @@ func (si *bufferedIterator) close() {
 	si.origBytes = nil
 }
 
-func newEntryIterator(ctx context.Context, pool ReaderPool, b []byte, pipeline log.StreamPipeline, format byte, symbolizer *symbolizer) iter.EntryIterator {
-	return &entryBufferedIterator{
-		bufferedIterator: newBufferedIterator(ctx, pool, b, format, symbolizer),
-		pipeline:         pipeline,
-		stats:            stats.FromContext(ctx),
-	}
-}
-
 type entryBufferedIterator struct {
 	*bufferedIterator
 	pipeline log.StreamPipeline
@@ -1681,7 +1679,15 @@ func (e *entryBufferedIterator) Close() error {
 	return e.bufferedIterator.Close()
 }
 
-func newSampleIterator(ctx context.Context, pool ReaderPool, b []byte, format byte, extractor log.StreamSampleExtractor, symbolizer *symbolizer) iter.SampleIterator {
+func newBlockEntryIterator(ctx context.Context, pool ReaderPool, b []byte, pipeline log.StreamPipeline, format byte, symbolizer *symbolizer) iter.EntryIterator {
+	return &entryBatchIterator{
+		blockIterator: newBlockIterator(ctx, pool, b, format, symbolizer),
+		pipeline:      pipeline,
+		stats:         stats.FromContext(ctx),
+	}
+}
+
+func newBlockSampleIterator(ctx context.Context, pool ReaderPool, b []byte, format byte, extractor log.StreamSampleExtractor, symbolizer *symbolizer) iter.SampleIterator {
 	it := &sampleBufferedIterator{
 		bufferedIterator: newBufferedIterator(ctx, pool, b, format, symbolizer),
 		extractor:        extractor,
