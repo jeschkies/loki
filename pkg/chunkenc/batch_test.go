@@ -1,7 +1,7 @@
 package chunkenc
 
 import (
-	"bytes"
+	//"bytes"
 	"fmt"
 	"math/rand"
 	"strings"
@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/dustin/go-humanize"
+	memmem "github.com/jeschkies/go-memmem/pkg/search"
+
 	"github.com/grafana/loki/pkg/chunkenc/testdata"
 	"github.com/grafana/loki/pkg/logproto"
 )
@@ -19,18 +21,19 @@ func BenchmarkFilter(b *testing.B) {
 	r := rand.New(rand.NewSource(42))
 
 	sizes := []uint64{256 * humanize.KiByte, 512 * humanize.KiByte, 1 * humanize.MiByte, 4 * humanize.MiByte}
-	selectivity := []float64{0.3, 0.1, 0.01}
+	selectivity := []float64{1.0, 0.3, 0.1, 0.01}
 	for _, sel := range selectivity {
 		for _, size := range sizes {
 			totalBytes := uint64(0)
 			needle := "matchme"
-			field := "" 
+			needleB := []byte(needle)
+			field := ""
+			// TODO: this can be improved. With too few samples we might not have any match.
 			if r.Float64() < sel {
-				field = "matchme"
+				field = needle
 			}
 			for i := int64(0); totalBytes < size; i++ {
-
-				line := fmt.Sprintf("%s select=%s", testdata.LogString(i), field)
+				line := fmt.Sprintf("%s needle=%s", testdata.LogString(i), field)
 				entries = append(entries, logproto.Entry{
 					Timestamp: time.Unix(i, 0),
 					Line:      line,
@@ -53,11 +56,13 @@ func BenchmarkFilter(b *testing.B) {
 			b.ResetTimer()
 			b.Run(fmt.Sprintf("batch-%s-%f", humanize.Bytes(size), sel), func(b *testing.B) {
 				haystack := batch.lines
+				var offset int64
 				for n := 0; n < b.N; n++ {
 					i := 0
 					for i < len(batch.offsets) {
 						start := batch.offsets[i]
-						offset := bytes.Index(haystack[start:], []byte(needle))
+						//offset := bytes.Index(haystack[start:], []byte(needle))
+						offset = memmem.Index(haystack[start:], needleB)
 						if offset == -1 {
 							break
 						}
