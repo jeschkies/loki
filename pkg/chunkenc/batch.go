@@ -318,3 +318,9 @@ func (b *batch) Get(i int) (int64, []byte, bool) {
 	}
 	return b.timestamps[i], b.lines[prevOffset:b.offsets[i]], true
 }
+
+func (b *batch) Append(ts int64, line []byte) {
+	b.timestamps = append(b.timestamps, ts)
+	b.offsets = append(b.offsets, int64(len(b.lines)))
+	b.lines = append(b.lines, line...)
+}
