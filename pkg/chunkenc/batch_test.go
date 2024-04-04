@@ -4,7 +4,8 @@ import (
 	//"bytes"
 	"fmt"
 	"math/rand"
-	"strings"
+
+	//"strings"
 	"testing"
 	"time"
 
@@ -44,17 +45,19 @@ func BenchmarkFilter(b *testing.B) {
 
 			b.ResetTimer()
 			b.ReportAllocs()
-			b.Run(fmt.Sprintf("sequential-%s-%f", humanize.Bytes(size), sel), func(b *testing.B) {
-				for n := 0; n < b.N; n++ {
-					for _, e := range entries {
-						strings.Contains(e.Line, needle)
+			/*
+				b.Run(fmt.Sprintf("sequential-%s-%f", humanize.Bytes(size), sel), func(b *testing.B) {
+					for n := 0; n < b.N; n++ {
+						for _, e := range entries {
+							strings.Contains(e.Line, needle)
+						}
+						b.SetBytes(int64(totalBytes))
 					}
-					b.SetBytes(int64(totalBytes))
-				}
-			})
+				})
+			*/
 
 			b.ResetTimer()
-			b.Run(fmt.Sprintf("batch-%s-%f", humanize.Bytes(size), sel), func(b *testing.B) {
+			b.Run(fmt.Sprintf("%s-%f", humanize.Bytes(size), sel), func(b *testing.B) {
 				haystack := batch.lines
 				var offset int64
 				for n := 0; n < b.N; n++ {
