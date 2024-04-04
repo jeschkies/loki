@@ -3,6 +3,7 @@ package pattern
 import (
 	"bytes"
 	"errors"
+	//memmem "github.com/jeschkies/go-memmem/pkg/search"
 )
 
 var (

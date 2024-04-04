@@ -157,7 +157,7 @@ func Test_matcher_Matches(t *testing.T) {
 	for _, tt := range fixtures {
 		tt := tt
 		t.Run(tt.expr, func(t *testing.T) {
-			t.Parallel()
+			//t.Parallel()
 			m, err := New(tt.expr)
 			require.NoError(t, err)
 			line := []byte(tt.in)
