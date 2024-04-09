@@ -1,7 +1,7 @@
 package chunkenc
 
 import (
-	"bytes"
+	//"bytes"
 	"fmt"
 	"math/rand"
 
@@ -89,36 +89,32 @@ func BenchmarkFilter(b *testing.B) {
 
 func BenchmarkCompressionThreshold(b *testing.B) {
 	sizes := []uint64{256 * humanize.KiByte, 512 * humanize.KiByte, 1 * humanize.MiByte, 4 * humanize.MiByte, 16 * humanize.MiByte}
-	blockSizes := []lz4.BlockSize{lz4.Block64Kb, lz4.Block256Kb, lz4.Block1Mb, lz4.Block4Mb}
-	for _, bs := range blockSizes {
-		for _, size := range sizes {
-			totalBytes := uint64(0)
-			batch := make([]byte, 0)
-			for i := int64(0); totalBytes < size; i++ {
-				line := testdata.LogString(i)
-				batch = append(batch, []byte(line)...)
-				totalBytes += uint64(len(line))
-			}
-
-			var dst bytes.Buffer
-			dst.Grow(len(batch))
-			// TODO: try https://pkg.go.dev/github.com/pierrec/lz4/v4#Compressor
-			w := lz4.NewWriter(&dst)
-			w.Apply(lz4.BlockSizeOption(bs))
-			//w := snappy.NewWriter(&dst)
-
-			b.ResetTimer()
-			b.ReportAllocs()
-			b.Run(fmt.Sprintf("%s-%s", humanize.Bytes(size), bs), func(b *testing.B) {
-				for n := 0; n < b.N; n++ {
-					dst.Reset()
-					_, err := w.Write(batch)
-					require.NoError(b, err)
-					err = w.Flush()
-					require.NoError(b, err)
-					b.SetBytes(int64(totalBytes))
-				}
-			})
+	for _, size := range sizes {
+		totalBytes := uint64(0)
+		batch := make([]byte, 0)
+		for i := int64(0); totalBytes < size; i++ {
+			line := testdata.LogString(i)
+			batch = append(batch, []byte(line)...)
+			totalBytes += uint64(len(line))
 		}
+
+		//var dst bytes.Buffer
+		//dst.Grow(len(batch))
+		dst := make([]byte, len(batch))
+		c := &lz4.Compressor{}
+		// TODO: try https://pkg.go.dev/github.com/pierrec/lz4/v4#Compressor
+		//w := lz4.NewWriter(&dst)
+		//w.Apply(lz4.BlockSizeOption(bs))
+		//w := snappy.NewWriter(&dst)
+
+		b.ResetTimer()
+		b.ReportAllocs()
+		b.Run(humanize.Bytes(size), func(b *testing.B) {
+			for n := 0; n < b.N; n++ {
+				_, err := c.CompressBlock(batch, dst)
+				require.NoError(b, err)
+				b.SetBytes(int64(totalBytes))
+			}
+		})
 	}
 }
