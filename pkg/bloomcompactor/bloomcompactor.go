@@ -16,13 +16,14 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
 
-	"github.com/grafana/loki/pkg/bloomutils"
-	"github.com/grafana/loki/pkg/storage"
-	v1 "github.com/grafana/loki/pkg/storage/bloom/v1"
-	"github.com/grafana/loki/pkg/storage/config"
-	"github.com/grafana/loki/pkg/storage/stores"
-	"github.com/grafana/loki/pkg/storage/stores/shipper/bloomshipper"
-	util_ring "github.com/grafana/loki/pkg/util/ring"
+	"github.com/grafana/loki/v3/pkg/bloomutils"
+	"github.com/grafana/loki/v3/pkg/storage"
+	v1 "github.com/grafana/loki/v3/pkg/storage/bloom/v1"
+	"github.com/grafana/loki/v3/pkg/storage/config"
+	"github.com/grafana/loki/v3/pkg/storage/stores"
+	"github.com/grafana/loki/v3/pkg/storage/stores/shipper/bloomshipper"
+	utillog "github.com/grafana/loki/v3/pkg/util/log"
+	util_ring "github.com/grafana/loki/v3/pkg/util/ring"
 )
 
 var (
@@ -48,7 +49,8 @@ type Compactor struct {
 
 	tsdbStore TSDBStore
 	// TODO(owen-d): ShardingStrategy
-	controller *SimpleBloomController
+	controller       *SimpleBloomController
+	retentionManager *RetentionManager
 
 	// temporary workaround until bloomStore has implemented read/write shipper interface
 	bloomStore bloomshipper.Store
@@ -64,17 +66,19 @@ func New(
 	storeCfg storage.Config,
 	clientMetrics storage.ClientMetrics,
 	fetcherProvider stores.ChunkFetcherProvider,
-	sharding util_ring.TenantSharding,
+	ring ring.ReadRing,
+	ringLifeCycler *ring.BasicLifecycler,
 	limits Limits,
 	store bloomshipper.StoreWithMetrics,
 	logger log.Logger,
 	r prometheus.Registerer,
 ) (*Compactor, error) {
+	utillog.WarnExperimentalUse("Bloom Compactor", logger)
 	c := &Compactor{
 		cfg:        cfg,
 		schemaCfg:  schemaCfg,
 		logger:     logger,
-		sharding:   sharding,
+		sharding:   util_ring.NewTenantShuffleSharding(ring, ringLifeCycler, limits.BloomCompactorShardSize),
 		limits:     limits,
 		bloomStore: store,
 		metrics:    NewMetrics(r, store.BloomMetrics()),
@@ -96,6 +100,15 @@ func New(
 		c.bloomStore,
 		chunkLoader,
 		c.limits,
+		c.metrics,
+		c.logger,
+	)
+
+	c.retentionManager = NewRetentionManager(
+		c.cfg.RetentionConfig,
+		c.limits,
+		c.bloomStore,
+		newFirstTokenRetentionSharding(ring, ringLifeCycler),
 		c.metrics,
 		c.logger,
 	)
@@ -214,9 +227,16 @@ func (c *Compactor) runOne(ctx context.Context) error {
 	c.metrics.compactionsStarted.Inc()
 	start := time.Now()
 	level.Info(c.logger).Log("msg", "running bloom compaction", "workers", c.cfg.WorkerParallelism)
-	var workersErr error
+	var workersErr, retentionErr error
 	var wg sync.WaitGroup
 	input := make(chan *tenantTableRange)
+
+	// Launch retention (will return instantly if retention is disabled or not owned by this compactor)
+	wg.Add(1)
+	go func() {
+		retentionErr = c.retentionManager.Apply(ctx)
+		wg.Done()
+	}()
 
 	tables := c.tables(time.Now())
 	level.Debug(c.logger).Log("msg", "loaded tables", "tables", tables.TotalDays())
@@ -236,7 +256,7 @@ func (c *Compactor) runOne(ctx context.Context) error {
 
 	wg.Wait()
 	duration := time.Since(start)
-	err = multierror.New(workersErr, err, ctx.Err()).Err()
+	err = multierror.New(retentionErr, workersErr, err, ctx.Err()).Err()
 
 	if err != nil {
 		level.Error(c.logger).Log("msg", "compaction iteration failed", "err", err, "duration", duration)

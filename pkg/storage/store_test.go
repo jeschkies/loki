@@ -13,7 +13,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/grafana/loki/pkg/util/httpreq"
+	"github.com/grafana/loki/v3/pkg/storage/types"
+	"github.com/grafana/loki/v3/pkg/util/httpreq"
 
 	"github.com/cespare/xxhash/v2"
 	"github.com/go-kit/log"
@@ -23,25 +24,26 @@ import (
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/stretchr/testify/require"
 
-	"github.com/grafana/loki/pkg/chunkenc"
-	"github.com/grafana/loki/pkg/ingester/client"
-	"github.com/grafana/loki/pkg/iter"
-	"github.com/grafana/loki/pkg/logproto"
-	"github.com/grafana/loki/pkg/logql"
-	lokilog "github.com/grafana/loki/pkg/logql/log"
-	"github.com/grafana/loki/pkg/logql/syntax"
-	"github.com/grafana/loki/pkg/logqlmodel/stats"
 	"github.com/grafana/loki/pkg/push"
-	"github.com/grafana/loki/pkg/querier/astmapper"
-	"github.com/grafana/loki/pkg/querier/plan"
-	"github.com/grafana/loki/pkg/storage/chunk"
-	"github.com/grafana/loki/pkg/storage/chunk/client/local"
-	"github.com/grafana/loki/pkg/storage/config"
-	"github.com/grafana/loki/pkg/storage/stores/shipper/indexshipper"
-	"github.com/grafana/loki/pkg/storage/stores/shipper/indexshipper/boltdb"
-	"github.com/grafana/loki/pkg/util/constants"
-	"github.com/grafana/loki/pkg/util/marshal"
-	"github.com/grafana/loki/pkg/validation"
+
+	"github.com/grafana/loki/v3/pkg/chunkenc"
+	"github.com/grafana/loki/v3/pkg/ingester/client"
+	"github.com/grafana/loki/v3/pkg/iter"
+	"github.com/grafana/loki/v3/pkg/logproto"
+	"github.com/grafana/loki/v3/pkg/logql"
+	lokilog "github.com/grafana/loki/v3/pkg/logql/log"
+	"github.com/grafana/loki/v3/pkg/logql/syntax"
+	"github.com/grafana/loki/v3/pkg/logqlmodel/stats"
+	"github.com/grafana/loki/v3/pkg/querier/astmapper"
+	"github.com/grafana/loki/v3/pkg/querier/plan"
+	"github.com/grafana/loki/v3/pkg/storage/chunk"
+	"github.com/grafana/loki/v3/pkg/storage/chunk/client/local"
+	"github.com/grafana/loki/v3/pkg/storage/config"
+	"github.com/grafana/loki/v3/pkg/storage/stores/shipper/indexshipper"
+	"github.com/grafana/loki/v3/pkg/storage/stores/shipper/indexshipper/boltdb"
+	"github.com/grafana/loki/v3/pkg/util/constants"
+	"github.com/grafana/loki/v3/pkg/util/marshal"
+	"github.com/grafana/loki/v3/pkg/validation"
 )
 
 var (
@@ -211,7 +213,7 @@ func getLocalStore(path string, cm ClientMetrics) Store {
 			{
 				From:       config.DayTime{Time: start},
 				IndexType:  "boltdb",
-				ObjectType: config.StorageTypeFileSystem,
+				ObjectType: types.StorageTypeFileSystem,
 				Schema:     "v13",
 				IndexTables: config.IndexPeriodicTableConfig{
 					PeriodicTableConfig: config.PeriodicTableConfig{
@@ -1281,8 +1283,8 @@ func TestStore_indexPrefixChange(t *testing.T) {
 
 	periodConfig := config.PeriodConfig{
 		From:       config.DayTime{Time: timeToModelTime(firstPeriodDate)},
-		IndexType:  config.TSDBType,
-		ObjectType: config.StorageTypeFileSystem,
+		IndexType:  types.TSDBType,
+		ObjectType: types.StorageTypeFileSystem,
 		Schema:     "v9",
 		IndexTables: config.IndexPeriodicTableConfig{
 			PathPrefix: "index/",
@@ -1355,7 +1357,7 @@ func TestStore_indexPrefixChange(t *testing.T) {
 	// update schema with a new period that uses different index prefix
 	periodConfig2 := config.PeriodConfig{
 		From:       config.DayTime{Time: timeToModelTime(secondPeriodDate)},
-		IndexType:  config.TSDBType,
+		IndexType:  types.TSDBType,
 		ObjectType: "named-store",
 		Schema:     "v11",
 		IndexTables: config.IndexPeriodicTableConfig{
@@ -1434,9 +1436,9 @@ func TestStore_MultiPeriod(t *testing.T) {
 	secondStoreDate := parseDate("2019-01-02")
 
 	for name, indexes := range map[string][]string{
-		"botldb_boltdb": {config.BoltDBShipperType, config.BoltDBShipperType},
-		"botldb_tsdb":   {config.BoltDBShipperType, config.TSDBType},
-		"tsdb_tsdb":     {config.TSDBType, config.TSDBType},
+		"botldb_boltdb": {types.BoltDBShipperType, types.BoltDBShipperType},
+		"botldb_tsdb":   {types.BoltDBShipperType, types.TSDBType},
+		"tsdb_tsdb":     {types.TSDBType, types.TSDBType},
 	} {
 		t.Run(name, func(t *testing.T) {
 			tempDir := t.TempDir()
@@ -1462,7 +1464,7 @@ func TestStore_MultiPeriod(t *testing.T) {
 			periodConfigV9 := config.PeriodConfig{
 				From:       config.DayTime{Time: timeToModelTime(firstStoreDate)},
 				IndexType:  indexes[0],
-				ObjectType: config.StorageTypeFileSystem,
+				ObjectType: types.StorageTypeFileSystem,
 				Schema:     "v9",
 				IndexTables: config.IndexPeriodicTableConfig{
 					PeriodicTableConfig: config.PeriodicTableConfig{
@@ -1819,7 +1821,7 @@ func TestStore_BoltdbTsdbSameIndexPrefix(t *testing.T) {
 			{
 				From:       config.DayTime{Time: timeToModelTime(boltdbShipperStartDate)},
 				IndexType:  "boltdb-shipper",
-				ObjectType: config.StorageTypeFileSystem,
+				ObjectType: types.StorageTypeFileSystem,
 				Schema:     "v12",
 				IndexTables: config.IndexPeriodicTableConfig{
 					PathPrefix: "index/",
@@ -1832,7 +1834,7 @@ func TestStore_BoltdbTsdbSameIndexPrefix(t *testing.T) {
 			{
 				From:       config.DayTime{Time: timeToModelTime(tsdbStartDate)},
 				IndexType:  "tsdb",
-				ObjectType: config.StorageTypeFileSystem,
+				ObjectType: types.StorageTypeFileSystem,
 				Schema:     "v12",
 				IndexTables: config.IndexPeriodicTableConfig{
 					PathPrefix: "index/",

@@ -16,9 +16,9 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"k8s.io/utils/keymutex"
 
-	v1 "github.com/grafana/loki/pkg/storage/bloom/v1"
-	"github.com/grafana/loki/pkg/storage/chunk/cache"
-	"github.com/grafana/loki/pkg/util/constants"
+	v1 "github.com/grafana/loki/v3/pkg/storage/bloom/v1"
+	"github.com/grafana/loki/v3/pkg/storage/chunk/cache"
+	"github.com/grafana/loki/v3/pkg/util/constants"
 )
 
 var downloadQueueCapacity = 10000
@@ -91,12 +91,16 @@ func NewFetcher(
 	logger log.Logger,
 	bloomMetrics *v1.Metrics,
 ) (*Fetcher, error) {
+	localFSResolver, err := NewShardedPrefixedResolver(cfg.workingDirs, defaultKeyResolver{})
+	if err != nil {
+		return nil, errors.Wrap(err, "creating fs resolver")
+	}
 	fetcher := &Fetcher{
 		cfg:             cfg,
 		client:          client,
 		metasCache:      metasCache,
 		blocksCache:     blocksCache,
-		localFSResolver: NewPrefixedResolver(cfg.workingDir, defaultKeyResolver{}),
+		localFSResolver: localFSResolver,
 		metrics:         newFetcherMetrics(reg, constants.Loki, "bloom_store"),
 		bloomMetrics:    bloomMetrics,
 		logger:          logger,

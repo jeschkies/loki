@@ -14,10 +14,11 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/atomic"
 
-	"github.com/grafana/loki/pkg/logql/syntax"
-	"github.com/grafana/loki/pkg/storage/config"
-	"github.com/grafana/loki/pkg/storage/stores/shipper/bloomshipper"
-	"github.com/grafana/loki/pkg/util/constants"
+	"github.com/grafana/loki/v3/pkg/logql/syntax"
+	"github.com/grafana/loki/v3/pkg/storage/chunk/client"
+	"github.com/grafana/loki/v3/pkg/storage/config"
+	"github.com/grafana/loki/v3/pkg/storage/stores/shipper/bloomshipper"
+	"github.com/grafana/loki/v3/pkg/util/constants"
 )
 
 var _ bloomshipper.Store = &dummyStore{}
@@ -53,6 +54,10 @@ func (s *dummyStore) ResolveMetas(_ context.Context, _ bloomshipper.MetaSearchPa
 func (s *dummyStore) FetchMetas(_ context.Context, _ bloomshipper.MetaSearchParams) ([]bloomshipper.Meta, error) {
 	//TODO(chaudum) Filter metas based on search params
 	return s.metas, nil
+}
+
+func (s *dummyStore) TenantFilesForInterval(_ context.Context, _ bloomshipper.Interval, _ func(tenant string, object client.StorageObject) bool) (map[string][]client.StorageObject, error) {
+	return nil, nil
 }
 
 func (s *dummyStore) Fetcher(_ model.Time) (*bloomshipper.Fetcher, error) {

@@ -7,9 +7,9 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 
-	"github.com/grafana/loki/pkg/logql/syntax"
-	"github.com/grafana/loki/pkg/querier/astmapper"
-	util_log "github.com/grafana/loki/pkg/util/log"
+	"github.com/grafana/loki/v3/pkg/logql/syntax"
+	"github.com/grafana/loki/v3/pkg/storage/stores/shipper/indexshipper/tsdb/index"
+	util_log "github.com/grafana/loki/v3/pkg/util/log"
 )
 
 const (
@@ -464,9 +464,9 @@ func (m ShardMapper) mapRangeAggregationExpr(expr *syntax.RangeAggregationExpr, 
 		downstreams := make([]DownstreamSampleExpr, 0, shards)
 		expr.Operation = syntax.OpRangeTypeQuantileSketch
 		for shard := shards - 1; shard >= 0; shard-- {
-			s := NewPowerOfTwoShard(astmapper.ShardAnnotation{
-				Shard: shard,
-				Of:    shards,
+			s := NewPowerOfTwoShard(index.ShardAnnotation{
+				Shard: uint32(shard),
+				Of:    uint32(shards),
 			})
 			downstreams = append(downstreams, DownstreamSampleExpr{
 				shard:      &s,

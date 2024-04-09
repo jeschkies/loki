@@ -10,8 +10,9 @@ import (
 	"github.com/go-kit/log/level"
 	"github.com/pkg/errors"
 
-	v1 "github.com/grafana/loki/pkg/storage/bloom/v1"
-	"github.com/grafana/loki/pkg/storage/chunk/cache"
+	v1 "github.com/grafana/loki/v3/pkg/storage/bloom/v1"
+	"github.com/grafana/loki/v3/pkg/storage/chunk/cache"
+	"github.com/grafana/loki/v3/pkg/util"
 )
 
 type CloseableBlockQuerier struct {
@@ -34,10 +35,14 @@ func (c *CloseableBlockQuerier) SeriesIter() (v1.PeekingIterator[*v1.SeriesWithB
 	return v1.NewPeekingIter[*v1.SeriesWithBloom](c.BlockQuerier), nil
 }
 
-func LoadBlocksDirIntoCache(path string, c Cache, logger log.Logger) error {
-	level.Debug(logger).Log("msg", "load bloomshipper working directory into cache", "path", path)
-	keys, values := loadBlockDirectories(path, logger)
-	return c.PutMany(context.Background(), keys, values)
+func LoadBlocksDirIntoCache(paths []string, c Cache, logger log.Logger) error {
+	var err util.MultiError
+	for _, path := range paths {
+		level.Debug(logger).Log("msg", "load bloomshipper working directory into cache", "path", path)
+		keys, values := loadBlockDirectories(path, logger)
+		err.Add(c.PutMany(context.Background(), keys, values))
+	}
+	return err.Err()
 }
 
 func loadBlockDirectories(root string, logger log.Logger) (keys []string, values []BlockDirectory) {

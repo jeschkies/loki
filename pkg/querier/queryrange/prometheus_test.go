@@ -7,9 +7,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/grafana/loki/pkg/loghttp"
-	"github.com/grafana/loki/pkg/logproto"
-	"github.com/grafana/loki/pkg/querier/queryrange/queryrangebase"
+	"github.com/grafana/loki/v3/pkg/loghttp"
+	"github.com/grafana/loki/v3/pkg/logproto"
+	"github.com/grafana/loki/v3/pkg/querier/queryrange/queryrangebase"
 )
 
 var emptyStats = `"stats": {
@@ -25,6 +25,7 @@ var emptyStats = `"stats": {
 			"totalChunksDownloaded": 0,
 			"chunkRefsFetchTime": 0,
 			"queryReferencedStructuredMetadata": false,
+			"pipelineWrapperFilteredLines": 0,
 			"chunk" :{
 				"compressedBytes": 0,
 				"decompressedBytes": 0,
@@ -50,6 +51,7 @@ var emptyStats = `"stats": {
 			"totalChunksDownloaded": 0,
 			"chunkRefsFetchTime": 0,
 			"queryReferencedStructuredMetadata": false,
+			"pipelineWrapperFilteredLines": 0,
 			"chunk" :{
 				"compressedBytes": 0,
 				"decompressedBytes": 0,
@@ -171,7 +173,8 @@ func Test_encodePromResponse(t *testing.T) {
 			"matrix",
 			&LokiPromResponse{
 				Response: &queryrangebase.PrometheusResponse{
-					Status: string(queryrangebase.StatusSuccess),
+					Status:   queryrangebase.StatusSuccess,
+					Warnings: []string{"this is a warning"},
 					Data: queryrangebase.PrometheusData{
 						ResultType: loghttp.ResultTypeMatrix,
 						Result: []queryrangebase.SampleStream{
@@ -199,6 +202,7 @@ func Test_encodePromResponse(t *testing.T) {
 			},
 			`{
 				"status": "success",
+				"warnings": ["this is a warning"],
 				"data": {
 					"resultType": "matrix",
 					"result": [
@@ -219,7 +223,8 @@ func Test_encodePromResponse(t *testing.T) {
 			"vector",
 			&LokiPromResponse{
 				Response: &queryrangebase.PrometheusResponse{
-					Status: string(queryrangebase.StatusSuccess),
+					Status:   queryrangebase.StatusSuccess,
+					Warnings: []string{"this is a warning"},
 					Data: queryrangebase.PrometheusData{
 						ResultType: loghttp.ResultTypeVector,
 						Result: []queryrangebase.SampleStream{
@@ -245,6 +250,7 @@ func Test_encodePromResponse(t *testing.T) {
 			},
 			`{
 				"status": "success",
+				"warnings": ["this is a warning"],
 				"data": {
 					"resultType": "vector",
 					"result": [
