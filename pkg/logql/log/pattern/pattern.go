@@ -3,7 +3,8 @@ package pattern
 import (
 	"bytes"
 	"errors"
-	//memmem "github.com/jeschkies/go-memmem/pkg/search"
+
+	memmem "github.com/jeschkies/go-memmem/pkg/search"
 )
 
 var (
@@ -77,7 +78,7 @@ func (m *Matcher) Matches(in []byte) [][]byte {
 	captures := m.captures[:0]
 	expr := m.e
 	if ls, ok := expr[0].(literals); ok {
-		i := bytes.Index(in, ls)
+		i := memmem.Index(in, ls)
 		if i != 0 {
 			return nil
 		}
@@ -98,7 +99,7 @@ func (m *Matcher) Matches(in []byte) [][]byte {
 		capt := expr[0].(capture)
 		ls := expr[1].(literals)
 		expr = expr[2:]
-		i := bytes.Index(in, ls)
+		i := memmem.Index(in, ls)
 		if i == -1 {
 			// if a capture is missed we return up to the end as the capture.
 			if !capt.isUnnamed() {
@@ -108,11 +109,11 @@ func (m *Matcher) Matches(in []byte) [][]byte {
 		}
 
 		if capt.isUnnamed() {
-			in = in[len(ls)+i:]
+			in = in[int64(len(ls))+i:]
 			continue
 		}
 		captures = append(captures, in[:i])
-		in = in[len(ls)+i:]
+		in = in[int64(len(ls))+i:]
 	}
 
 	return captures
