@@ -102,6 +102,7 @@ func BenchmarkCompressionThreshold(b *testing.B) {
 
 			var dst bytes.Buffer
 			dst.Grow(len(batch))
+			// TODO: try https://pkg.go.dev/github.com/pierrec/lz4/v4#Compressor
 			w := lz4.NewWriter(&dst)
 			w.Apply(lz4.BlockSizeOption(bs))
 			//w := snappy.NewWriter(&dst)
