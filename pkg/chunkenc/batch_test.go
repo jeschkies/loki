@@ -10,10 +10,10 @@ import (
 	"time"
 
 	"github.com/dustin/go-humanize"
-	//"github.com/golang/snappy"
+	"github.com/golang/snappy"
 	memmem "github.com/jeschkies/go-memmem/pkg/search"
 
-	"github.com/pierrec/lz4/v4"
+	//"github.com/pierrec/lz4/v4"
 	"github.com/stretchr/testify/require"
 
 	"github.com/grafana/loki/v3/pkg/chunkenc/testdata"
@@ -88,7 +88,7 @@ func BenchmarkFilter(b *testing.B) {
 }
 
 func BenchmarkCompressionThreshold(b *testing.B) {
-	sizes := []uint64{256 * humanize.KiByte, 512 * humanize.KiByte, 1 * humanize.MiByte, 4 * humanize.MiByte, 16 * humanize.MiByte}
+	sizes := []uint64{256 * humanize.KiByte, 512 * humanize.KiByte, 1 * humanize.MiByte, 4 * humanize.MiByte}
 	for _, size := range sizes {
 		totalBytes := uint64(0)
 		batch := make([]byte, 0)
@@ -98,11 +98,17 @@ func BenchmarkCompressionThreshold(b *testing.B) {
 			totalBytes += uint64(len(line))
 		}
 
-		//var dst bytes.Buffer
-		//dst.Grow(len(batch))
-		dst := make([]byte, len(batch))
-		c := &lz4.Compressor{}
-		// TODO: try https://pkg.go.dev/github.com/pierrec/lz4/v4#Compressor
+		//var compressed bytes.Buffer
+		//compressed.Grow(len(batch))
+		compressed := make([]byte, len(batch))
+		/*
+			c := &lz4.Compressor{}
+			offset, err := c.CompressBlock(batch, dst)
+			require.NoError(b, err)
+			dst = dst[:offset]
+		*/
+		compressed = snappy.Encode(compressed, batch)
+		out := make([]byte, len(batch))
 		//w := lz4.NewWriter(&dst)
 		//w.Apply(lz4.BlockSizeOption(bs))
 		//w := snappy.NewWriter(&dst)
@@ -114,7 +120,9 @@ func BenchmarkCompressionThreshold(b *testing.B) {
 				// dst.Reset()
 				// err := w.Write(batc)
 				// err = w.Flush()
-				_, err := c.CompressBlock(batch, dst)
+				// 🙈 we want decompression speed.
+				_, err := snappy.Decode(out, compressed)
+				//_, err := lz4.UncompressBlock(dst, out)
 				require.NoError(b, err)
 				b.SetBytes(int64(totalBytes))
 			}
