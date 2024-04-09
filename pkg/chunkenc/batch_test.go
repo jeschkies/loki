@@ -111,6 +111,9 @@ func BenchmarkCompressionThreshold(b *testing.B) {
 		b.ReportAllocs()
 		b.Run(humanize.Bytes(size), func(b *testing.B) {
 			for n := 0; n < b.N; n++ {
+				// dst.Reset()
+				// err := w.Write(batc)
+				// err = w.Flush()
 				_, err := c.CompressBlock(batch, dst)
 				require.NoError(b, err)
 				b.SetBytes(int64(totalBytes))
