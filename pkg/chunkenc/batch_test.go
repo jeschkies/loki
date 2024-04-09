@@ -12,8 +12,8 @@ import (
 	"github.com/dustin/go-humanize"
 	memmem "github.com/jeschkies/go-memmem/pkg/search"
 
-	"github.com/grafana/loki/pkg/chunkenc/testdata"
-	"github.com/grafana/loki/pkg/logproto"
+	"github.com/grafana/loki/v3/pkg/chunkenc/testdata"
+	"github.com/grafana/loki/v3/pkg/logproto"
 )
 
 func BenchmarkFilter(b *testing.B) {
