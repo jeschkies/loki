@@ -208,7 +208,7 @@ Generated storage config for loki common config
 {{- if .Values.minio.enabled -}}
 s3:
   endpoint: {{ include "loki.minio" $ }}
-  bucketnames: {{ $.Values.loki.storage.bucketNames.chunks }}
+  bucketnames: chunks
   secret_access_key: {{ $.Values.minio.rootPassword }}
   access_key_id: {{ $.Values.minio.rootUser }}
   s3forcepathstyle: true
@@ -346,7 +346,7 @@ Storage config for ruler
 {{- if .Values.minio.enabled -}}
 type: "s3"
 s3:
-  bucketnames: {{ $.Values.loki.storage.bucketNames.ruler }}
+  bucketnames: ruler
 {{- else if eq .Values.loki.storage.type "s3" -}}
 {{- with .Values.loki.storage.s3 }}
 type: "s3"
@@ -601,7 +601,7 @@ Create the service endpoint including port for MinIO.
 */}}
 {{- define "loki.minio" -}}
 {{- if .Values.minio.enabled -}}
-{{- printf "%s-%s.%s.svc:%s" .Release.Name "minio" .Release.Namespace (.Values.minio.service.port | toString) -}}
+{{- .Values.minio.address | default (printf "%s-%s.%s.svc:%s" .Release.Name "minio" .Release.Namespace (.Values.minio.service.port | toString)) -}}
 {{- end -}}
 {{- end -}}
 
@@ -801,6 +801,9 @@ http {
     location = /distributor/ring {
       proxy_pass       {{ $distributorUrl }}$request_uri;
     }
+    location = /otlp/v1/logs {
+      proxy_pass       {{ $distributorUrl }}$request_uri;
+    }
 
     # Ingester
     location = /flush {
@@ -928,13 +931,18 @@ enableServiceLinks: false
 {{/* Determine compactor address based on target configuration */}}
 {{- define "loki.compactorAddress" -}}
 {{- $isSimpleScalable := eq (include "loki.deployment.isScalable" .) "true" -}}
+{{- $isDistributed := eq (include "loki.deployment.isDistributed" .) "true "-}}
+{{- $isSingleBinary := eq (include "loki.deployment.isSingleBinary" .) "true" -}}
 {{- $compactorAddress := include "loki.backendFullname" . -}}
 {{- if and $isSimpleScalable .Values.read.legacyReadTarget -}}
 {{/* 2 target configuration */}}
 {{- $compactorAddress = include "loki.readFullname" . -}}
-{{- else if (not $isSimpleScalable) -}}
+{{- else if $isSingleBinary -}}
 {{/* single binary */}}
 {{- $compactorAddress = include "loki.singleBinaryFullname" . -}}
+{{/* distributed */}}
+{{- else if $isDistributed -}}
+{{- $compactorAddress = include "loki.compactorFullname" . -}}
 {{- end -}}
 {{- printf "http://%s:%s" $compactorAddress (.Values.loki.server.http_listen_port | toString) }}
 {{- end }}
@@ -986,5 +994,16 @@ Return the appropriate apiVersion for PodDisruptionBudget.
     {{- print "policy/v1" -}}
   {{- else -}}
     {{- print "policy/v1beta1" -}}
+  {{- end -}}
+{{- end -}}
+
+{{/*
+Return the object store type for use with the test schema.
+*/}}
+{{- define "loki.testSchemaObjectStore" -}}
+  {{- if .Values.minio.enabled -}}
+    s3
+  {{- else -}}
+    filesystem
   {{- end -}}
 {{- end -}}

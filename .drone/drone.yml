@@ -17,7 +17,7 @@ steps:
       from_secret: docker_password
     repo: grafana/loki-build-image
     tags:
-    - 0.33.1-golangci.1.51.2-amd64
+    - 0.33.2-amd64
     username:
       from_secret: docker_username
   when:
@@ -54,7 +54,7 @@ steps:
       from_secret: docker_password
     repo: grafana/loki-build-image
     tags:
-    - 0.33.1-golangci.1.51.2-arm64
+    - 0.33.2-arm64
     username:
       from_secret: docker_username
   when:
@@ -86,7 +86,7 @@ steps:
     password:
       from_secret: docker_password
     spec: .drone/docker-manifest-build-image.tmpl
-    target: loki-build-image:0.33.1-golangci.1.51.2
+    target: loki-build-image:0.33.2
     username:
       from_secret: docker_username
   when:
@@ -132,38 +132,6 @@ workspace:
   path: loki
 ---
 kind: pipeline
-name: mixins
-steps:
-- commands:
-  - make BUILD_IN_CONTAINER=false lint-jsonnet
-  depends_on:
-  - clone
-  environment: {}
-  image: grafana/jsonnet-build:c8b75df
-  name: lint-jsonnet
-- commands:
-  - make BUILD_IN_CONTAINER=false loki-mixin-check
-  depends_on:
-  - clone
-  environment: {}
-  image: grafana/loki-build-image:0.33.1
-  name: loki-mixin-check
-  when:
-    event:
-    - pull_request
-    paths:
-    - production/loki-mixin/**
-trigger:
-  ref:
-  - refs/heads/main
-  - refs/heads/k???
-  - refs/tags/v*
-  - refs/pull/*/head
-workspace:
-  base: /src
-  path: loki
----
-kind: pipeline
 name: documentation-checks
 steps:
 - commands:
@@ -171,7 +139,7 @@ steps:
   depends_on:
   - clone
   environment: {}
-  image: grafana/loki-build-image:0.33.1
+  image: grafana/loki-build-image:0.33.2
   name: documentation-helm-reference-check
 trigger:
   ref:
@@ -1117,7 +1085,7 @@ steps:
       from_secret: docker_password
     DOCKER_USERNAME:
       from_secret: docker_username
-  image: grafana/loki-build-image:0.33.1
+  image: grafana/loki-build-image:0.33.2
   name: build and push
   privileged: true
   volumes:
@@ -1340,6 +1308,6 @@ kind: secret
 name: gpg_private_key
 ---
 kind: signature
-hmac: ef80f57ffff4f20ac7e12ef7eec7d8cee1d0b217a8ec5a93fe8d459f0967e155
+hmac: 87480bff973003712122d81a1575e2a62cff6fd4a42b163487cae6c6a67d8e7c
 
 ...
