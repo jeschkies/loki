@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
-	"fmt"
+	//"fmt"
 	"io"
 	"time"
 
@@ -64,8 +64,12 @@ func (e *entryBatchIterator) Close() error {
 
 type blockIterator struct {
 	origBytes []byte
+
+	// reader wraps origBytes
+	reader    io.Reader
 	stats     *stats.Context
 
+	// encReader reads compressed bytes from reader
 	encReader  io.Reader
 	pool       ReaderPool
 	symbolizer *symbolizer
@@ -107,6 +111,18 @@ func (si *blockIterator) Next() bool {
 
 // moveNext moves the buffer to the next entry
 func (si *blockIterator) moveNext() (int64, []byte, labels.Labels, bool) {
+	if si.reader == nil {
+		si.reader = bytes.NewReader(si.origBytes)
+	}
+	if si.encReader == nil {
+		var err error
+		si.encReader, err = si.pool.GetReader(si.reader)
+		if err != nil {
+			si.err = err
+			return 0, nil, nil, false
+		}
+	}
+
 	if si.batch == nil {
 		err := si.loadBatch()
 		if err != nil {
@@ -122,7 +138,7 @@ func (si *blockIterator) moveNext() (int64, []byte, labels.Labels, bool) {
 	si.curBatchIndex++
 
 	// Read symbolze
-
+    /*
 	lastAttempt := 0
 	var symbolsSectionLengthWidth, nSymbolsWidth, nSymbols int
 	for nSymbolsWidth == 0 { // Read until we have enough bytes for the labels.
@@ -206,61 +222,25 @@ func (si *blockIterator) moveNext() (int64, []byte, labels.Labels, bool) {
 	si.stats.AddDecompressedLines(1)
 	si.stats.AddDecompressedStructuredMetadataBytes(decompressedStructuredMetadataBytes)
 	si.stats.AddDecompressedBytes(decompressedStructuredMetadataBytes)
-
 	return ts, line, si.symbolizer.Lookup(si.symbolsBuf[:nSymbols]), true
+    */
+	return ts, line, labels.EmptyLabels(), true
 }
 
 func (si *blockIterator) loadBatch() error {
-	var err error
-	reader := bytes.NewReader(si.origBytes)
-	si.encReader, err = si.pool.GetReader(reader)
+	timestamps, err := DecodeVectorInt(si.reader)
 	if err != nil {
 		return err
 	}
 
-	// Read timestamps
-	tsLen, err := binary.ReadUvarint(reader)
-	tsCompressed := make([]uint64, tsLen)
-	for i := 0; i < int(tsLen); i++ {
-		tsCompressed[i], err = binary.ReadUvarint(reader)
-		if err != nil {
-			return err
-		}
-	}
-	_, timestamps := intcomp.UncompressDeltaVarByteInt64(tsCompressed, make([]int64, int(tsLen)))
-
-	// Read offsets
-	offsetsLen, err := binary.ReadUvarint(reader)
+	entries, err := DecodeVectorString(si.reader)
 	if err != nil {
 		return err
 	}
-	offsetsCompressed := make([]uint64, offsetsLen) // TODO: reuse tsCompressed
-	for i := 0; i < int(offsetsLen); i++ {
-		offsetsCompressed[i], err = binary.ReadUvarint(reader)
-		if err != nil {
-			return err
-		}
-	}
-	_, offsets := intcomp.UncompressDeltaVarByteInt64(offsetsCompressed, make([]int64, int(offsetsLen)))
-
-	// Read lines
-	linesSize, err := binary.ReadUvarint(reader)
-	if err != nil {
-		return err
-	}
-	lines := make([]byte, linesSize)
-	_, err = si.encReader.Read(lines)
-	if err != nil {
-		return err
-	}
-	// panic(n!=lineSize)
 
 	si.batch = &batch{
 		timestamps: timestamps,
-		entries:    VectorString{
-			offsets:    offsets,
-			lines:      lines,
-		},
+		entries:    entries,
 	}
 
 	return nil

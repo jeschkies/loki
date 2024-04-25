@@ -30,7 +30,8 @@ func generateData(enc Encoding, chunksCount, blockSize, targetSize int) ([]Chunk
 
 	for n := 0; n < chunksCount; n++ {
 		entry := logprotoEntry(0, testdata.LogString(0))
-		c := NewMemChunk(ChunkFormatV4, enc, UnorderedWithStructuredMetadataHeadBlockFmt, blockSize, targetSize)
+		//TODO: support unordered c := NewMemChunk(ChunkFormatV4, enc, UnorderedWithStructuredMetadataHeadBlockFmt, blockSize, targetSize)
+		c := NewMemChunk(ChunkFormatV3, enc, OrderedHeadBlockFmt, blockSize, targetSize)
 		for c.SpaceFor(entry) {
 			size += uint64(len(entry.Line))
 			_ = c.Append(entry)

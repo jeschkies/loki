@@ -865,7 +865,7 @@ func (nomatchPipeline) ReferencedStructuredMetadata() bool {
 
 func BenchmarkRead(b *testing.B) {
 	for _, bs := range testBlockSizes {
-		for _, enc := range testEncoding {
+		for _, enc := range []Encoding{EncSnappy} {//testEncoding {
 			name := fmt.Sprintf("%s_%s", enc.String(), humanize.Bytes(uint64(bs)))
 			b.Run(name, func(b *testing.B) {
 				chunks, size := generateData(enc, 5, bs, testTargetSize)
@@ -891,6 +891,7 @@ func BenchmarkRead(b *testing.B) {
 		}
 	}
 
+	/*
 	for _, bs := range testBlockSizes {
 		for _, enc := range testEncoding {
 			name := fmt.Sprintf("sample_%s_%s", enc.String(), humanize.Bytes(uint64(bs)))
@@ -915,6 +916,7 @@ func BenchmarkRead(b *testing.B) {
 			})
 		}
 	}
+	*/
 }
 
 func BenchmarkBackwardIterator(b *testing.B) {

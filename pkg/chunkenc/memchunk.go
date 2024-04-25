@@ -16,7 +16,6 @@ import (
 	"github.com/go-kit/log/level"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
-	"github.com/ronanh/intcomp"
 
 	"github.com/grafana/loki/v3/pkg/iter"
 	"github.com/grafana/loki/v3/pkg/logproto"
@@ -199,74 +198,31 @@ func (hb *headBlock) Append(ts int64, line string, _ labels.Labels) error {
 
 // TODO: support columnar format
 func (hb *headBlock) Serialise(pool WriterPool) ([]byte, error) {
-	inBuf := serializeBytesBufferPool.Get().(*bytes.Buffer)
-	defer func() {
-		inBuf.Reset()
-		serializeBytesBufferPool.Put(inBuf)
-	}()
 	outBuf := &bytes.Buffer{}
 
-	encBuf := make([]byte, binary.MaxVarintLen64)
-	compressedWriter := pool.GetWriter(inBuf)
-	defer pool.PutWriter(compressedWriter)
-
-	timestamps := make([]int64, 0, len(hb.entries))
-	offsets := make([]int64, 0, len(hb.entries))
+	timestamps := make([]int64, len(hb.entries))
+	entries := VectorString{
+		offsets: make([]int64, len(hb.entries)),
+		lines:   make([]byte, 0),
+	}
 
 	curOffset := 0
-	for _, logEntry := range hb.entries {
-		timestamps = append(timestamps, logEntry.t)
-		// offsets is always on ahead
+	for i, logEntry := range hb.entries {
+		timestamps[i] = logEntry.t
+
+		// offsets is always one ahead
 		curOffset += len(logEntry.s)
-		offsets = append(offsets, int64(curOffset))
-
-		// TODO: might not be very efficient.
-		compressedWriter.Write([]byte(logEntry.s))
-		//inBuf.WriteString(logEntry.s)
-
-		/*
-			n := binary.PutVarint(encBuf, logEntry.t)
-			inBuf.Write(encBuf[:n])
-
-			n = binary.PutUvarint(encBuf, uint64(len(logEntry.s)))
-			inBuf.Write(encBuf[:n])
-
-			inBuf.WriteString(logEntry.s)
-		*/
+		entries.offsets[i] = int64(curOffset)
+		entries.lines = append(entries.lines, []byte(logEntry.s)...)
 	}
 
-	out := serializeIntsBufferPool.Get().([]uint64)
-	defer func() {
-		out = out[0:0]
-		serializeIntsBufferPool.Put(out)
-	}()
-	out = intcomp.CompressDeltaVarByteInt64(timestamps, out)
-	n := binary.PutUvarint(encBuf, uint64(len(out)))
-	outBuf.Write(encBuf[:n])
-	for _, x := range out {
-		n := binary.PutUvarint(encBuf, x)
-		outBuf.Write(encBuf[:n])
+	err := EncodeVectorInt(timestamps, outBuf)
+	if err != nil {
+		return nil, err
 	}
-
-	out = intcomp.CompressDeltaVarByteInt64(offsets, out)
-	n = binary.PutUvarint(encBuf, uint64(len(out)))
-	outBuf.Write(encBuf[:n])
-	for _, x := range out {
-		n := binary.PutUvarint(encBuf, x)
-		outBuf.Write(encBuf[:n])
-	}
-
-	n = binary.PutUvarint(encBuf, uint64(inBuf.Len()))
-	outBuf.Write(encBuf[:n])
-	outBuf.Write(inBuf.Bytes())
-
-	/*
-		if _, err := compressedWriter.Write(inBuf.Bytes()); err != nil {
-			return nil, errors.Wrap(err, "appending entry")
-		}
-	*/
-	if err := compressedWriter.Close(); err != nil {
-		return nil, errors.Wrap(err, "flushing pending compress buffer")
+	err = EncodeVectorString(entries, outBuf)
+	if err != nil {
+		return nil, err
 	}
 
 	return outBuf.Bytes(), nil
