@@ -2,12 +2,14 @@ package chunkenc
 
 import (
 	//"bytes"
+	"bytes"
 	"fmt"
 	"math/rand"
 	"strings"
 
 	//"strings"
 	"testing"
+	"testing/quick"
 	"time"
 
 	"github.com/dustin/go-humanize"
@@ -21,6 +23,20 @@ import (
 	"github.com/grafana/loki/v3/pkg/chunkenc/testdata"
 	"github.com/grafana/loki/v3/pkg/logproto"
 )
+
+func TestEncodingVectorInt(t *testing.T) {
+	property := func(in []int64) bool {
+		var buf bytes.Buffer
+		EncodeVectorInt(in, &buf)
+		out, err := DecodeVectorInt(&buf)
+		require.NoError(t, err)
+		return len(out) == len(in)
+	}
+	if err := quick.Check(property, nil); err != nil {
+		t.Error(err)
+	}
+
+}
 
 func BenchmarkFilter(b *testing.B) {
 	entries := make([]logproto.Entry, 0)

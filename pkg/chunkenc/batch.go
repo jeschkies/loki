@@ -256,8 +256,10 @@ func (si *blockIterator) loadBatch() error {
 
 	si.batch = &batch{
 		timestamps: timestamps,
-		offsets:    offsets,
-		lines:      lines,
+		entries:    VectorString{
+			offsets:    offsets,
+			lines:      lines,
+		},
 	}
 
 	return nil
@@ -300,10 +302,16 @@ func newBlockIterator(ctx context.Context, pool ReaderPool, b []byte, format byt
 	}
 }
 
-type batch struct {
-	timestamps []int64
-	offsets    []int64
+type VectorInt []int64
+
+type VectorString struct {
+	offsets    VectorInt
 	lines      []byte
+}
+
+type batch struct {
+	timestamps VectorInt
+	entries    VectorString
 }
 
 // Returns the timestamp and line for index i or false
@@ -314,13 +322,45 @@ func (b *batch) Get(i int) (int64, []byte, bool) {
 
 	prevOffset := 0
 	if i > 0 {
-		prevOffset = int(b.offsets[i-1])
+		prevOffset = int(b.entries.offsets[i-1])
 	}
-	return b.timestamps[i], b.lines[prevOffset:b.offsets[i]], true
+	return b.timestamps[i], b.entries.lines[prevOffset:b.entries.offsets[i]], true
 }
 
 func (b *batch) Append(ts int64, line []byte) {
 	b.timestamps = append(b.timestamps, ts)
-	b.offsets = append(b.offsets, int64(len(b.lines)))
-	b.lines = append(b.lines, line...)
+	b.entries.offsets = append(b.entries.offsets, int64(len(b.entries.lines)))
+	b.entries.lines = append(b.entries.lines, line...)
+}
+
+func EncodeVectorInt(vec VectorInt, w io.Writer) error {
+	out := make([]uint64, 0, len(vec))
+	out = intcomp.CompressDeltaVarByteInt64(vec, out)
+	if err := binary.Write(w, binary.LittleEndian, int64(len(out))); err != nil {
+		return err
+	}
+	if err := binary.Write(w, binary.LittleEndian, out); err != nil {
+		return err
+	}
+	return nil
+}
+
+func DecodeVectorInt(r io.Reader) (VectorInt, error){
+	var l int64
+	if err := binary.Read(r, binary.LittleEndian, &l); err != nil {
+		return nil, err
+	}
+	compressed := make([]uint64, l)
+	if err := binary.Read(r, binary.LittleEndian, compressed); err != nil {
+		return nil, err
+	}
+	_, uncompressed := intcomp.UncompressDeltaVarByteInt64(compressed, make([]int64, 0, l))
+	return uncompressed, nil
+}
+
+func EncodeVectorString(vec VectorString, w io.Writer) error {
+	if err := EncodeVectorInt(vec.offsets, w); err != nil {
+		return err
+	}
+	return nil
 }
