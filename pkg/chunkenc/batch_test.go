@@ -42,7 +42,22 @@ func TestEncodingVectorInt(t *testing.T) {
 
 }
 
-func TestEncodingVectorString(t *testing.T) {
+func TestEncodingVectorStringSimple(t *testing.T) {
+	in := VectorString{
+		offsets: []int64{4, 8},
+		lines:   []byte(`lorem ipsum`),
+	}
+	var buf bytes.Buffer
+	err := EncodeVectorString(in, &buf)
+	require.NoError(t, err)
+
+	out, err := DecodeVectorString(&buf)
+	require.NoError(t, err)
+	require.ElementsMatch(t, in.offsets, out.offsets)
+	require.Equal(t, string(in.lines), string(out.lines))
+}
+
+func TestEncodingVectorStringCheck(t *testing.T) {
 	property := func(offsets []int64, lines []byte) bool {
 		in := VectorString{
 			offsets: offsets,

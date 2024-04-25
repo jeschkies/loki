@@ -370,7 +370,7 @@ func EncodeVectorString(vec VectorString, w io.Writer) error {
 	// TODO: reuse compressor
 	c := &lz4.Compressor{}
 	// TODO: use pool for dst
-	dst := make([]byte, len(vec.lines))
+	dst := make([]byte, lz4.CompressBlockBound(len(vec.lines)))
 	offset, err := c.CompressBlock(vec.lines, dst)
 	if err != nil {
 		return err
