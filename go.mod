@@ -129,7 +129,6 @@ require (
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/heroku/x v0.0.61
 	github.com/influxdata/tdigest v0.0.2-0.20210216194612-fc98d27c9e8b
-	github.com/jeschkies/go-memmem v0.1.1-0.20240409121027-17ada0ff44c9
 	github.com/mitchellh/colorstring v0.0.0-20190213212951-d06e56a500db
 	github.com/prometheus/alertmanager v0.27.0
 	github.com/prometheus/common/sigv4 v0.1.0
