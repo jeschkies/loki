@@ -8,6 +8,7 @@ import (
 	"io"
 	"time"
 
+	"github.com/pierrec/lz4/v4"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/ronanh/intcomp"
 
@@ -362,5 +363,52 @@ func EncodeVectorString(vec VectorString, w io.Writer) error {
 	if err := EncodeVectorInt(vec.offsets, w); err != nil {
 		return err
 	}
+
+	if err := binary.Write(w, binary.LittleEndian, int64(len(vec.lines))); err != nil {
+		return err
+	}
+	// TODO: reuse compressor
+	c := &lz4.Compressor{}
+	// TODO: use pool for dst
+	dst := make([]byte, len(vec.lines))
+	offset, err := c.CompressBlock(vec.lines, dst)
+	if err != nil {
+		return err
+	}
+	dst = dst[:offset]
+	if err := binary.Write(w, binary.LittleEndian, int64(offset)); err != nil {
+		return err
+	}
+	if _, err := w.Write(dst); err != nil {
+		return err
+	}
 	return nil
+}
+
+func DecodeVectorString(r io.Reader) (VectorString, error){
+	vec := VectorString{}
+	var err error
+	vec.offsets, err = DecodeVectorInt(r)
+	if err != nil {
+		return vec, err
+	}
+
+	var l int64
+	if err := binary.Read(r, binary.LittleEndian, &l); err != nil {
+		return vec, err
+	}
+	var cl int64
+	if err := binary.Read(r, binary.LittleEndian, &cl); err != nil {
+		return vec, err
+	}
+	// TODO: we can avoid this allocation since the the underlying data is
+	// already in memory 
+	compressed := make([]byte, cl)
+	_, err = r.Read(compressed)
+	if err != nil {
+		return vec, err
+	}
+	vec.lines = make([]byte, l)
+	_, err = lz4.UncompressBlock(compressed, vec.lines)
+	return vec, err
 }

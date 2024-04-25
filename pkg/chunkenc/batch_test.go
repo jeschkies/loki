@@ -27,10 +27,36 @@ import (
 func TestEncodingVectorInt(t *testing.T) {
 	property := func(in []int64) bool {
 		var buf bytes.Buffer
-		EncodeVectorInt(in, &buf)
+		err := EncodeVectorInt(in, &buf)
+		require.NoError(t, err)
+
 		out, err := DecodeVectorInt(&buf)
 		require.NoError(t, err)
+
+		require.ElementsMatch(t, in, out)
 		return len(out) == len(in)
+	}
+	if err := quick.Check(property, nil); err != nil {
+		t.Error(err)
+	}
+
+}
+
+func TestEncodingVectorString(t *testing.T) {
+	property := func(offsets []int64, lines []byte) bool {
+		in := VectorString{
+			offsets: offsets,
+			lines:   lines,
+		}
+		var buf bytes.Buffer
+		err := EncodeVectorString(in, &buf)
+		require.NoError(t, err)
+
+		out, err := DecodeVectorString(&buf)
+		require.NoError(t, err)
+		require.ElementsMatch(t, in.offsets, out.offsets)
+		require.Equal(t, string(in.lines), string(out.lines))
+		return len(out.offsets) == len(in.offsets)
 	}
 	if err := quick.Check(property, nil); err != nil {
 		t.Error(err)
