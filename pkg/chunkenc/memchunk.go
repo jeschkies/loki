@@ -196,8 +196,38 @@ func (hb *headBlock) Append(ts int64, line string, _ labels.Labels) error {
 	return nil
 }
 
-// TODO: support columnar format
 func (hb *headBlock) Serialise(pool WriterPool) ([]byte, error) {
+	/* main
+	inBuf := serializeBytesBufferPool.Get().(*bytes.Buffer)
+	defer func() {
+		inBuf.Reset()
+		serializeBytesBufferPool.Put(inBuf)
+	}()
+	outBuf := &bytes.Buffer{}
+
+	encBuf := make([]byte, binary.MaxVarintLen64)
+	compressedWriter := pool.GetWriter(outBuf)
+	defer pool.PutWriter(compressedWriter)
+	for _, logEntry := range hb.entries {
+		n := binary.PutVarint(encBuf, logEntry.t)
+		inBuf.Write(encBuf[:n])
+
+		n = binary.PutUvarint(encBuf, uint64(len(logEntry.s)))
+		inBuf.Write(encBuf[:n])
+
+		inBuf.WriteString(logEntry.s)
+	}
+
+	if _, err := compressedWriter.Write(inBuf.Bytes()); err != nil {
+		return nil, errors.Wrap(err, "appending entry")
+	}
+	if err := compressedWriter.Close(); err != nil {
+		return nil, errors.Wrap(err, "flushing pending compress buffer")
+	}
+
+	return outBuf.Bytes(), nil
+	*/
+	/* Columnar */
 	outBuf := &bytes.Buffer{}
 
 	timestamps := make([]int64, len(hb.entries))
@@ -1155,6 +1185,7 @@ func (b encBlock) Iterator(ctx context.Context, pipeline log.StreamPipeline) ite
 	if len(b.b) == 0 {
 		return iter.NoopIterator
 	}
+	// main return newEntryIterator(ctx, GetReaderPool(b.enc), b.b, pipeline, b.format, b.symbolizer)
 	return newBlockEntryIterator(ctx, GetReaderPool(b.enc), b.b, pipeline, b.format, b.symbolizer)
 }
 
@@ -1589,6 +1620,14 @@ func (si *bufferedIterator) close() {
 	}
 
 	si.origBytes = nil
+}
+
+func newEntryIterator(ctx context.Context, pool ReaderPool, b []byte, pipeline log.StreamPipeline, format byte, symbolizer *symbolizer) iter.EntryIterator {
+	return &entryBufferedIterator{
+		bufferedIterator: newBufferedIterator(ctx, pool, b, format, symbolizer),
+		pipeline:         pipeline,
+		stats:            stats.FromContext(ctx),
+	}
 }
 
 type entryBufferedIterator struct {
