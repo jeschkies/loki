@@ -60,6 +60,7 @@ const (
 	defaultMaxStructuredMetadataSize  = "64kb"
 	defaultMaxStructuredMetadataCount = 128
 	defaultBloomCompactorMaxBlockSize = "200MB"
+	defaultBloomCompactorMaxBloomSize = "128MB"
 )
 
 // Limits describe all the limits for users; can be used to describe global default
@@ -100,6 +101,7 @@ type Limits struct {
 	TSDBMaxQueryParallelism    int              `yaml:"tsdb_max_query_parallelism" json:"tsdb_max_query_parallelism"`
 	TSDBMaxBytesPerShard       flagext.ByteSize `yaml:"tsdb_max_bytes_per_shard" json:"tsdb_max_bytes_per_shard"`
 	TSDBShardingStrategy       string           `yaml:"tsdb_sharding_strategy" json:"tsdb_sharding_strategy"`
+	TSDBPrecomputeChunks       bool             `yaml:"tsdb_precompute_chunks" json:"tsdb_precompute_chunks"`
 	CardinalityLimit           int              `yaml:"cardinality_limit" json:"cardinality_limit"`
 	MaxStreamsMatchersPerQuery int              `yaml:"max_streams_matchers_per_query" json:"max_streams_matchers_per_query"`
 	MaxConcurrentTailRequests  int              `yaml:"max_concurrent_tail_requests" json:"max_concurrent_tail_requests"`
@@ -185,7 +187,7 @@ type Limits struct {
 	// Deprecated
 	CompactorDeletionEnabled bool `yaml:"allow_deletes" json:"allow_deletes" doc:"deprecated|description=Use deletion_mode per tenant configuration instead."`
 
-	ShardStreams *shardstreams.Config `yaml:"shard_streams" json:"shard_streams"`
+	ShardStreams shardstreams.Config `yaml:"shard_streams" json:"shard_streams" doc:"description=Define streams sharding behavior."`
 
 	BlockedQueries []*validation.BlockedQuery `yaml:"blocked_queries,omitempty" json:"blocked_queries,omitempty"`
 
@@ -201,6 +203,7 @@ type Limits struct {
 	BloomCompactorShardSize    int              `yaml:"bloom_compactor_shard_size" json:"bloom_compactor_shard_size" category:"experimental"`
 	BloomCompactorEnabled      bool             `yaml:"bloom_compactor_enable_compaction" json:"bloom_compactor_enable_compaction" category:"experimental"`
 	BloomCompactorMaxBlockSize flagext.ByteSize `yaml:"bloom_compactor_max_block_size" json:"bloom_compactor_max_block_size" category:"experimental"`
+	BloomCompactorMaxBloomSize flagext.ByteSize `yaml:"bloom_compactor_max_bloom_size" json:"bloom_compactor_max_bloom_size" category:"experimental"`
 
 	BloomNGramLength       int     `yaml:"bloom_ngram_length" json:"bloom_ngram_length" category:"experimental"`
 	BloomNGramSkip         int     `yaml:"bloom_ngram_skip" json:"bloom_ngram_skip" category:"experimental"`
@@ -255,7 +258,7 @@ func (l *Limits) RegisterFlags(f *flag.FlagSet) {
 		"job",
 	}
 	f.Var((*dskit_flagext.StringSlice)(&l.DiscoverServiceName), "validation.discover-service-name", "If no service_name label exists, Loki maps a single label from the configured list to service_name. If none of the configured labels exist in the stream, label is set to unknown_service. Empty list disables setting the label.")
-	f.BoolVar(&l.DiscoverLogLevels, "validation.discover-log-levels", true, "Discover and add log levels during ingestion, if not present already. Levels would be added to Structured Metadata with name 'level' and one of the values from 'debug', 'info', 'warn', 'error', 'critical', 'fatal'.")
+	f.BoolVar(&l.DiscoverLogLevels, "validation.discover-log-levels", true, "Discover and add log levels during ingestion, if not present already. Levels would be added to Structured Metadata with name level/LEVEL/Level/Severity/severity/SEVERITY/lvl/LVL/Lvl (case-sensitive) and one of the values from 'trace', 'debug', 'info', 'warn', 'error', 'critical', 'fatal' (case insensitive).")
 
 	_ = l.RejectOldSamplesMaxAge.Set("7d")
 	f.Var(&l.RejectOldSamplesMaxAge, "validation.reject-old-samples.max-age", "Maximum accepted sample age before rejecting.")
@@ -299,6 +302,7 @@ func (l *Limits) RegisterFlags(f *flag.FlagSet) {
 			logql.BoundedVersion.String(),
 		),
 	)
+	f.BoolVar(&l.TSDBPrecomputeChunks, "querier.tsdb-precompute-chunks", false, "Precompute chunks for TSDB queries. This can improve query performance at the cost of increased memory usage by computing chunks once during planning, reducing index calls.")
 	f.IntVar(&l.CardinalityLimit, "store.cardinality-limit", 1e5, "Cardinality limit for index queries.")
 	f.IntVar(&l.MaxStreamsMatchersPerQuery, "querier.max-streams-matcher-per-query", 1000, "Maximum number of stream matchers per query.")
 	f.IntVar(&l.MaxConcurrentTailRequests, "querier.max-concurrent-tail-requests", 10, "Maximum number of concurrent tail requests.")
@@ -376,7 +380,14 @@ func (l *Limits) RegisterFlags(f *flag.FlagSet) {
 		),
 	)
 
-	l.ShardStreams = &shardstreams.Config{}
+	_ = l.BloomCompactorMaxBloomSize.Set(defaultBloomCompactorMaxBloomSize)
+	f.Var(&l.BloomCompactorMaxBloomSize, "bloom-compactor.max-bloom-size",
+		fmt.Sprintf(
+			"Experimental. The maximum bloom size per log stream. A log stream whose generated bloom filter exceeds this size will be discarded. A value of 0 sets an unlimited size. Default is %s.",
+			defaultBloomCompactorMaxBloomSize,
+		),
+	)
+
 	l.ShardStreams.RegisterFlagsWithPrefix("shard-streams", f)
 
 	f.IntVar(&l.VolumeMaxSeries, "limits.volume-max-series", 1000, "The default number of aggregated series or labels that can be returned from a log-volume endpoint")
@@ -391,7 +402,7 @@ func (l *Limits) RegisterFlags(f *flag.FlagSet) {
 // SetGlobalOTLPConfig set GlobalOTLPConfig which is used while unmarshaling per-tenant otlp config to use the default list of resource attributes picked as index labels.
 func (l *Limits) SetGlobalOTLPConfig(cfg push.GlobalOTLPConfig) {
 	l.GlobalOTLPConfig = cfg
-	l.OTLPConfig = push.DefaultOTLPConfig(cfg)
+	l.OTLPConfig.ApplyGlobalOTLPConfig(cfg)
 }
 
 // UnmarshalYAML implements the yaml.Unmarshaler interface.
@@ -466,6 +477,10 @@ func (l *Limits) Validate() error {
 
 	if _, err := chunkenc.ParseEncoding(l.BloomBlockEncoding); err != nil {
 		return err
+	}
+
+	if l.TSDBMaxBytesPerShard <= 0 {
+		return errors.New("querier.tsdb-max-bytes-per-shard must be greater than 0")
 	}
 
 	return nil
@@ -630,6 +645,10 @@ func (o *Overrides) TSDBMaxBytesPerShard(userID string) int {
 // TSDBShardingStrategy returns the sharding strategy to use in query planning.
 func (o *Overrides) TSDBShardingStrategy(userID string) string {
 	return o.getOverridesForUser(userID).TSDBShardingStrategy
+}
+
+func (o *Overrides) TSDBPrecomputeChunks(userID string) bool {
+	return o.getOverridesForUser(userID).TSDBPrecomputeChunks
 }
 
 // MaxQueryParallelism returns the limit to the number of sub-queries the
@@ -880,7 +899,7 @@ func (o *Overrides) DeletionMode(userID string) string {
 	return o.getOverridesForUser(userID).DeletionMode
 }
 
-func (o *Overrides) ShardStreams(userID string) *shardstreams.Config {
+func (o *Overrides) ShardStreams(userID string) shardstreams.Config {
 	return o.getOverridesForUser(userID).ShardStreams
 }
 
@@ -964,6 +983,10 @@ func (o *Overrides) BloomNGramSkip(userID string) int {
 
 func (o *Overrides) BloomCompactorMaxBlockSize(userID string) int {
 	return o.getOverridesForUser(userID).BloomCompactorMaxBlockSize.Val()
+}
+
+func (o *Overrides) BloomCompactorMaxBloomSize(userID string) int {
+	return o.getOverridesForUser(userID).BloomCompactorMaxBloomSize.Val()
 }
 
 func (o *Overrides) BloomFalsePositiveRate(userID string) float64 {

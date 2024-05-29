@@ -457,7 +457,7 @@ func (s *mockStore) PutOne(_ context.Context, _, _ model.Time, _ chunk.Chunk) er
 	return nil
 }
 
-func (s *mockStore) GetChunks(_ context.Context, _ string, _, _ model.Time, _ chunk.Predicate) ([][]chunk.Chunk, []*fetcher.Fetcher, error) {
+func (s *mockStore) GetChunks(_ context.Context, _ string, _, _ model.Time, _ chunk.Predicate, _ *logproto.ChunkRefGroup) ([][]chunk.Chunk, []*fetcher.Fetcher, error) {
 	return nil, nil, nil
 }
 
@@ -833,8 +833,8 @@ func TestIngester_GetDetectedLabels(t *testing.T) {
 	require.NoError(t, err)
 
 	res, err := i.GetDetectedLabels(ctx, &logproto.DetectedLabelsRequest{
-		Start: &[]time.Time{time.Now().Add(11 * time.Nanosecond)}[0],
-		End:   nil,
+		Start: []time.Time{time.Now().Add(11 * time.Nanosecond)}[0],
+		End:   []time.Time{time.Now().Add(12 * time.Nanosecond)}[0],
 		Query: "",
 	})
 
@@ -893,8 +893,8 @@ func TestIngester_GetDetectedLabelsWithQuery(t *testing.T) {
 	require.NoError(t, err)
 
 	res, err := i.GetDetectedLabels(ctx, &logproto.DetectedLabelsRequest{
-		Start: &[]time.Time{time.Now().Add(11 * time.Nanosecond)}[0],
-		End:   nil,
+		Start: []time.Time{time.Now().Add(11 * time.Nanosecond)}[0],
+		End:   []time.Time{time.Now().Add(11 * time.Nanosecond)}[0],
 		Query: `{foo="bar"}`,
 	})
 
