@@ -26,7 +26,7 @@ type StreamPipeline interface {
 	// The buffer returned for the log line can be reused on subsequent calls to Process and therefore must be copied.
 	Process(ts int64, line []byte, structuredMetadata ...labels.Label) (resultLine []byte, resultLabels LabelsResult, matches bool)
 	ProcessString(ts int64, line string, structuredMetadata ...labels.Label) (resultLine string, resultLabels LabelsResult, matches bool)
-	//ProcessBatch(ts []int64, lines []byte, offsets [])
+	ProcessBatch(batch *Batch) (lines [][]byte, ts []int64)
 	ReferencedStructuredMetadata() bool
 }
 
@@ -109,6 +109,10 @@ func (n noopStreamPipeline) Process(_ int64, line []byte, structuredMetadata ...
 func (n noopStreamPipeline) ProcessString(ts int64, line string, structuredMetadata ...labels.Label) (string, LabelsResult, bool) {
 	_, lr, ok := n.Process(ts, unsafeGetBytes(line), structuredMetadata...)
 	return line, lr, ok
+}
+
+func (_ noopStreamPipeline) ProcessBatch(b *Batch) ([][]byte, []int64) {
+	return nil, b.Timestamps // TODO: return all lines
 }
 
 func (n noopStreamPipeline) BaseLabels() LabelsResult { return n.builder.currentResult }
@@ -237,6 +241,15 @@ func (p *streamPipeline) ProcessString(ts int64, line string, structuredMetadata
 	lb, lr, ok := p.Process(ts, unsafeGetBytes(line), structuredMetadata...)
 	// but the returned line needs to be copied.
 	return string(lb), lr, ok
+}
+
+func (p *streamPipeline) ProcessBatch(b *Batch) ([][]byte, []int64) {
+	for _, s := range p.stages {
+		line, ok = s.ProcessBatch(ts, line, p.builder) // TODO: fix
+		if !ok {
+			return nil, nil, false
+		}
+	}
 }
 
 func (p *streamPipeline) BaseLabels() LabelsResult { return p.builder.currentResult }

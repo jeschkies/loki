@@ -25,6 +25,10 @@ type entryBatchIterator struct {
 
 	cur        logproto.Entry
 	currLabels log.LabelsResult
+
+	curLines [][]byte
+	curTs    []int64
+	curIndex int
 }
 
 func (e *entryBatchIterator) Entry() logproto.Entry {
@@ -36,23 +40,18 @@ func (e *entryBatchIterator) Labels() string { return e.currLabels.String() }
 func (e *entryBatchIterator) StreamHash() uint64 { return e.pipeline.BaseLabels().Hash() }
 
 func (e *entryBatchIterator) Next() bool {
-	//e.pipeline.ProcessBatch()
-	for e.blockIterator.Next() {
-		// TODO: process batch instead going line by line
-		newLine, lbs, matches := e.pipeline.Process(e.currTs, e.currLine, e.currStructuredMetadata...)
-		if !matches {
-			continue
-		}
-
-		e.stats.AddPostFilterLines(1)
-		e.currLabels = lbs
-		e.cur.Timestamp = time.Unix(0, e.currTs)
-		e.cur.Line = string(newLine)
-		e.cur.StructuredMetadata = logproto.FromLabelsToLabelAdapters(lbs.StructuredMetadata())
-		e.cur.Parsed = logproto.FromLabelsToLabelAdapters(lbs.Parsed())
-
-		return true
+	if e.curLines == nil {
+		e.blockIterator.Load()
+		e.curLines, e.curTs = e.pipeline.ProcessBatch(e.blockIterator.batch)
+		e.curIndex = -1
 	}
+	e.curIndex++
+	if e.curIndex < len(e.curLines) {
+		e.cur.Timestamp = time.Unix(0, e.curTs[e.curIndex])
+		e.cur.Line = string(e.curLines[e.curIndex])
+		
+	}
+
 	return false
 }
 
@@ -90,7 +89,7 @@ type blockIterator struct {
 
 	closed bool
 
-	batch         *Batch
+	batch         *log.Batch
 	curBatchIndex int
 }
 
@@ -109,6 +108,10 @@ func (si *blockIterator) Next() bool {
 	si.currLine = line
 	si.currStructuredMetadata = structuredMetadata
 	return true
+}
+
+func (si *blockIterator) Load() {
+	si.moveNext()
 }
 
 // moveNext moves the buffer to the next entry
@@ -240,9 +243,9 @@ func (si *blockIterator) loadBatch() error {
 		return err
 	}
 
-	si.batch = &Batch{
-		timestamps: timestamps,
-		entries:    entries,
+	si.batch = &log.Batch{
+		Timestamps: timestamps,
+		Entries:    entries,
 	}
 
 	return nil
@@ -285,38 +288,7 @@ func newBlockIterator(ctx context.Context, pool ReaderPool, b []byte, format byt
 	}
 }
 
-type VectorInt []int64
-
-type VectorString struct {
-	offsets VectorInt
-	lines   []byte
-}
-
-type Batch struct {
-	timestamps VectorInt
-	entries    VectorString
-}
-
-// Returns the timestamp and line for index i or false
-func (b *Batch) Get(i int) (int64, []byte, bool) {
-	if i < 0 || i >= len(b.timestamps) {
-		return 0, nil, false
-	}
-
-	prevOffset := 0
-	if i > 0 {
-		prevOffset = int(b.entries.offsets[i-1])
-	}
-	return b.timestamps[i], b.entries.lines[prevOffset:b.entries.offsets[i]], true
-}
-
-func (b *Batch) Append(ts int64, line []byte) {
-	b.timestamps = append(b.timestamps, ts)
-	b.entries.offsets = append(b.entries.offsets, int64(len(b.entries.lines)))
-	b.entries.lines = append(b.entries.lines, line...)
-}
-
-func EncodeVectorInt(vec VectorInt, w io.Writer) error {
+func EncodeVectorInt(vec log.VectorInt, w io.Writer) error {
 	out := make([]uint64, 0, len(vec))
 	out = intcomp.CompressDeltaVarByteInt64(vec, out)
 	if err := binary.Write(w, binary.LittleEndian, int64(len(out))); err != nil {
@@ -328,7 +300,7 @@ func EncodeVectorInt(vec VectorInt, w io.Writer) error {
 	return nil
 }
 
-func DecodeVectorInt(r io.Reader) (VectorInt, error) {
+func DecodeVectorInt(r io.Reader) (log.VectorInt, error) {
 	var l int64
 	if err := binary.Read(r, binary.LittleEndian, &l); err != nil {
 		return nil, err
@@ -341,19 +313,19 @@ func DecodeVectorInt(r io.Reader) (VectorInt, error) {
 	return uncompressed, nil
 }
 
-func EncodeVectorString(vec VectorString, w io.Writer) error {
-	if err := EncodeVectorInt(vec.offsets, w); err != nil {
+func EncodeVectorString(vec log.VectorString, w io.Writer) error {
+	if err := EncodeVectorInt(vec.Offsets, w); err != nil {
 		return err
 	}
 
-	if err := binary.Write(w, binary.LittleEndian, int64(len(vec.lines))); err != nil {
+	if err := binary.Write(w, binary.LittleEndian, int64(len(vec.Lines))); err != nil {
 		return err
 	}
 	// TODO: reuse compressor
 	c := &lz4.Compressor{}
 	// TODO: use pool for dst
-	dst := make([]byte, lz4.CompressBlockBound(len(vec.lines)))
-	offset, err := c.CompressBlock(vec.lines, dst)
+	dst := make([]byte, lz4.CompressBlockBound(len(vec.Lines)))
+	offset, err := c.CompressBlock(vec.Lines, dst)
 	if err != nil {
 		return err
 	}
@@ -367,10 +339,10 @@ func EncodeVectorString(vec VectorString, w io.Writer) error {
 	return nil
 }
 
-func DecodeVectorString(r io.Reader) (VectorString, error) {
-	vec := VectorString{}
+func DecodeVectorString(r io.Reader) (log.VectorString, error) {
+	vec := log.VectorString{}
 	var err error
-	vec.offsets, err = DecodeVectorInt(r)
+	vec.Offsets, err = DecodeVectorInt(r)
 	if err != nil {
 		return vec, err
 	}
@@ -390,7 +362,7 @@ func DecodeVectorString(r io.Reader) (VectorString, error) {
 	if err != nil {
 		return vec, err
 	}
-	vec.lines = make([]byte, l)
-	_, err = lz4.UncompressBlock(compressed, vec.lines)
+	vec.Lines = make([]byte, l)
+	_, err = lz4.UncompressBlock(compressed, vec.Lines)
 	return vec, err
 }

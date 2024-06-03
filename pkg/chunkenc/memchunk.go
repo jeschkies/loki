@@ -231,9 +231,9 @@ func (hb *headBlock) Serialise(pool WriterPool) ([]byte, error) {
 	outBuf := &bytes.Buffer{}
 
 	timestamps := make([]int64, len(hb.entries))
-	entries := VectorString{
-		offsets: make([]int64, len(hb.entries)),
-		lines:   make([]byte, 0),
+	entries := log.VectorString{
+		Offsets: make([]int64, len(hb.entries)),
+		Lines:   make([]byte, 0),
 	}
 
 	curOffset := 0
@@ -242,8 +242,8 @@ func (hb *headBlock) Serialise(pool WriterPool) ([]byte, error) {
 
 		// offsets is always one ahead
 		curOffset += len(logEntry.s)
-		entries.offsets[i] = int64(curOffset)
-		entries.lines = append(entries.lines, []byte(logEntry.s)...)
+		entries.Offsets[i] = int64(curOffset)
+		entries.Lines = append(entries.Lines, []byte(logEntry.s)...)
 	}
 
 	err := EncodeVectorInt(timestamps, outBuf)

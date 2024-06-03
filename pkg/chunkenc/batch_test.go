@@ -22,6 +22,7 @@ import (
 
 	"github.com/grafana/loki/v3/pkg/chunkenc/testdata"
 	"github.com/grafana/loki/v3/pkg/logproto"
+	"github.com/grafana/loki/v3/pkg/logql/log"
 )
 
 func TestEncodingVectorInt(t *testing.T) {
@@ -43,9 +44,9 @@ func TestEncodingVectorInt(t *testing.T) {
 }
 
 func TestEncodingVectorStringSimple(t *testing.T) {
-	in := VectorString{
-		offsets: []int64{4, 8},
-		lines:   []byte(`lorem ipsum`),
+	in := log.VectorString{
+		Offsets: []int64{4, 8},
+		Lines:   []byte(`lorem ipsum`),
 	}
 	var buf bytes.Buffer
 	err := EncodeVectorString(in, &buf)
@@ -53,15 +54,15 @@ func TestEncodingVectorStringSimple(t *testing.T) {
 
 	out, err := DecodeVectorString(&buf)
 	require.NoError(t, err)
-	require.ElementsMatch(t, in.offsets, out.offsets)
-	require.Equal(t, string(in.lines), string(out.lines))
+	require.ElementsMatch(t, in.Offsets, out.Offsets)
+	require.Equal(t, string(in.Lines), string(out.Lines))
 }
 
 func TestEncodingVectorStringCheck(t *testing.T) {
 	property := func(offsets []int64, lines []byte) bool {
-		in := VectorString{
-			offsets: offsets,
-			lines:   lines,
+		in := log.VectorString{
+			Offsets: offsets,
+			Lines:   lines,
 		}
 		var buf bytes.Buffer
 		err := EncodeVectorString(in, &buf)
@@ -69,9 +70,9 @@ func TestEncodingVectorStringCheck(t *testing.T) {
 
 		out, err := DecodeVectorString(&buf)
 		require.NoError(t, err)
-		require.ElementsMatch(t, in.offsets, out.offsets)
-		require.Equal(t, string(in.lines), string(out.lines))
-		return len(out.offsets) == len(in.offsets)
+		require.ElementsMatch(t, in.Offsets, out.Offsets)
+		require.Equal(t, string(in.Lines), string(out.Lines))
+		return len(out.Offsets) == len(in.Offsets)
 	}
 	if err := quick.Check(property, nil); err != nil {
 		t.Error(err)
@@ -81,7 +82,7 @@ func TestEncodingVectorStringCheck(t *testing.T) {
 
 func BenchmarkFilter(b *testing.B) {
 	entries := make([]logproto.Entry, 0)
-	batch := &Batch{}
+	batch := &log.Batch{}
 	r := rand.New(rand.NewSource(42))
 
 	sizes := []uint64{512 * humanize.KiByte, 1 * humanize.MiByte, 4 * humanize.MiByte}
