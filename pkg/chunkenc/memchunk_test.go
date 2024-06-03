@@ -863,9 +863,13 @@ func (nomatchPipeline) ReferencedStructuredMetadata() bool {
 	return false
 }
 
+// THE BENCHMARK
 func BenchmarkRead(b *testing.B) {
+	filter, err := log.NewFilter("GC", log.LineMatchEqual)
+	require.NoError(b, err)
+	filterPipeline := log.NewStreamPipeline([]log.Stage{filter.ToStage()}, log.NewBaseLabelsBuilder().ForLabels(labels.EmptyLabels(), 0))
 	for _, bs := range testBlockSizes {
-		for _, enc := range []Encoding{EncSnappy} {//testEncoding {
+		for _, enc := range []Encoding{EncSnappy} { //testEncoding {
 			name := fmt.Sprintf("%s_%s", enc.String(), humanize.Bytes(uint64(bs)))
 			b.Run(name, func(b *testing.B) {
 				chunks, size := generateData(enc, 5, bs, testTargetSize)
@@ -874,7 +878,7 @@ func BenchmarkRead(b *testing.B) {
 				for n := 0; n < b.N; n++ {
 					for _, c := range chunks {
 						// use forward iterator for benchmark -- backward iterator does extra allocations by keeping entries in memory
-						iterator, err := c.Iterator(ctx, time.Unix(0, 0), time.Now(), logproto.FORWARD, nomatchPipeline{})
+						iterator, err := c.Iterator(ctx, time.Unix(0, 0), time.Now(), logproto.FORWARD, filterPipeline)
 						if err != nil {
 							panic(err)
 						}
@@ -892,30 +896,30 @@ func BenchmarkRead(b *testing.B) {
 	}
 
 	/*
-	for _, bs := range testBlockSizes {
-		for _, enc := range testEncoding {
-			name := fmt.Sprintf("sample_%s_%s", enc.String(), humanize.Bytes(uint64(bs)))
-			b.Run(name, func(b *testing.B) {
-				chunks, size := generateData(enc, 5, bs, testTargetSize)
-				_, ctx := stats.NewContext(context.Background())
-				b.ResetTimer()
-				bytesRead := uint64(0)
-				for n := 0; n < b.N; n++ {
-					for _, c := range chunks {
-						iterator := c.SampleIterator(ctx, time.Unix(0, 0), time.Now(), countExtractor)
-						for iterator.Next() {
-							_ = iterator.Sample()
+		for _, bs := range testBlockSizes {
+			for _, enc := range testEncoding {
+				name := fmt.Sprintf("sample_%s_%s", enc.String(), humanize.Bytes(uint64(bs)))
+				b.Run(name, func(b *testing.B) {
+					chunks, size := generateData(enc, 5, bs, testTargetSize)
+					_, ctx := stats.NewContext(context.Background())
+					b.ResetTimer()
+					bytesRead := uint64(0)
+					for n := 0; n < b.N; n++ {
+						for _, c := range chunks {
+							iterator := c.SampleIterator(ctx, time.Unix(0, 0), time.Now(), countExtractor)
+							for iterator.Next() {
+								_ = iterator.Sample()
+							}
+							if err := iterator.Close(); err != nil {
+								b.Fatal(err)
+							}
 						}
-						if err := iterator.Close(); err != nil {
-							b.Fatal(err)
-						}
+						bytesRead += size
 					}
-					bytesRead += size
-				}
-				b.SetBytes(int64(bytesRead) / int64(b.N))
-			})
+					b.SetBytes(int64(bytesRead) / int64(b.N))
+				})
+			}
 		}
-	}
 	*/
 }
 

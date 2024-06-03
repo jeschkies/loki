@@ -26,6 +26,7 @@ type StreamPipeline interface {
 	// The buffer returned for the log line can be reused on subsequent calls to Process and therefore must be copied.
 	Process(ts int64, line []byte, structuredMetadata ...labels.Label) (resultLine []byte, resultLabels LabelsResult, matches bool)
 	ProcessString(ts int64, line string, structuredMetadata ...labels.Label) (resultLine string, resultLabels LabelsResult, matches bool)
+	//ProcessBatch(ts []int64, lines []byte, offsets [])
 	ReferencedStructuredMetadata() bool
 }
 

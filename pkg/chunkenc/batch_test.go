@@ -81,7 +81,7 @@ func TestEncodingVectorStringCheck(t *testing.T) {
 
 func BenchmarkFilter(b *testing.B) {
 	entries := make([]logproto.Entry, 0)
-	batch := &batch{}
+	batch := &Batch{}
 	r := rand.New(rand.NewSource(42))
 
 	sizes := []uint64{512 * humanize.KiByte, 1 * humanize.MiByte, 4 * humanize.MiByte}

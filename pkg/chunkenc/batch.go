@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+
 	//"fmt"
 	"io"
 	"time"
@@ -35,6 +36,7 @@ func (e *entryBatchIterator) Labels() string { return e.currLabels.String() }
 func (e *entryBatchIterator) StreamHash() uint64 { return e.pipeline.BaseLabels().Hash() }
 
 func (e *entryBatchIterator) Next() bool {
+	//e.pipeline.ProcessBatch()
 	for e.blockIterator.Next() {
 		// TODO: process batch instead going line by line
 		newLine, lbs, matches := e.pipeline.Process(e.currTs, e.currLine, e.currStructuredMetadata...)
@@ -66,8 +68,8 @@ type blockIterator struct {
 	origBytes []byte
 
 	// reader wraps origBytes
-	reader    io.Reader
-	stats     *stats.Context
+	reader io.Reader
+	stats  *stats.Context
 
 	// encReader reads compressed bytes from reader
 	encReader  io.Reader
@@ -88,7 +90,7 @@ type blockIterator struct {
 
 	closed bool
 
-	batch         *batch
+	batch         *Batch
 	curBatchIndex int
 }
 
@@ -138,60 +140,10 @@ func (si *blockIterator) moveNext() (int64, []byte, labels.Labels, bool) {
 	si.curBatchIndex++
 
 	// Read symbolze
-    /*
-	lastAttempt := 0
-	var symbolsSectionLengthWidth, nSymbolsWidth, nSymbols int
-	for nSymbolsWidth == 0 { // Read until we have enough bytes for the labels.
-		n, err := si.encReader.Read(si.readBuf[si.readBufValid:])
-		si.readBufValid += n
-		if err != nil {
-			if err != io.EOF {
-				si.err = err
-				return 0, nil, nil, false
-			}
-			if si.readBufValid == 0 { // Got EOF and no data in the buffer.
-				return 0, nil, nil, false
-			}
-			if si.readBufValid == lastAttempt { // Got EOF and could not parse same data last time.
-				si.err = fmt.Errorf("invalid data in chunk")
-				return 0, nil, nil, false
-			}
-		}
-		var l uint64
-		_, symbolsSectionLengthWidth = binary.Uvarint(si.readBuf[:si.readBufValid])
-		l, nSymbolsWidth = binary.Uvarint(si.readBuf[symbolsSectionLengthWidth:si.readBufValid])
-		nSymbols = int(l)
-		lastAttempt = si.readBufValid
-	}
-
-	// Number of labels
-	decompressedStructuredMetadataBytes := int64(binary.MaxVarintLen64)
-
-	// Label symbols
-	decompressedStructuredMetadataBytes += int64(nSymbols * 2 * binary.MaxVarintLen64)
-
-	// Shift down what is still left in the fixed-size read buffer, if any.
-	si.readBufValid = copy(si.readBuf[:], si.readBuf[symbolsSectionLengthWidth+nSymbolsWidth:si.readBufValid])
-
-	// If not enough space for the symbols, create a new buffer slice and put the old one back in the pool.
-	if nSymbols > cap(si.symbolsBuf) {
-		if si.symbolsBuf != nil {
-			SymbolsPool.Put(si.symbolsBuf)
-		}
-		si.symbolsBuf = SymbolsPool.Get(nSymbols).([]symbol)
-		if nSymbols > cap(si.symbolsBuf) {
-			si.err = fmt.Errorf("could not get a symbols matrix of size %d, actual %d", nSymbols, cap(si.symbolsBuf))
-			return 0, nil, nil, false
-		}
-	}
-
-	si.symbolsBuf = si.symbolsBuf[:nSymbols]
-
-	// Read all the symbols, into the buffer.
-	for i := 0; i < nSymbols; i++ {
-		var sName, sValue uint64
-		var nWidth, vWidth, lastAttempt int
-		for vWidth == 0 { // Read until both varints have enough bytes.
+	/*
+		lastAttempt := 0
+		var symbolsSectionLengthWidth, nSymbolsWidth, nSymbols int
+		for nSymbolsWidth == 0 { // Read until we have enough bytes for the labels.
 			n, err := si.encReader.Read(si.readBuf[si.readBufValid:])
 			si.readBufValid += n
 			if err != nil {
@@ -207,23 +159,73 @@ func (si *blockIterator) moveNext() (int64, []byte, labels.Labels, bool) {
 					return 0, nil, nil, false
 				}
 			}
-			sName, nWidth = binary.Uvarint(si.readBuf[:si.readBufValid])
-			sValue, vWidth = binary.Uvarint(si.readBuf[nWidth:si.readBufValid])
+			var l uint64
+			_, symbolsSectionLengthWidth = binary.Uvarint(si.readBuf[:si.readBufValid])
+			l, nSymbolsWidth = binary.Uvarint(si.readBuf[symbolsSectionLengthWidth:si.readBufValid])
+			nSymbols = int(l)
 			lastAttempt = si.readBufValid
 		}
 
+		// Number of labels
+		decompressedStructuredMetadataBytes := int64(binary.MaxVarintLen64)
+
+		// Label symbols
+		decompressedStructuredMetadataBytes += int64(nSymbols * 2 * binary.MaxVarintLen64)
+
 		// Shift down what is still left in the fixed-size read buffer, if any.
-		si.readBufValid = copy(si.readBuf[:], si.readBuf[nWidth+vWidth:si.readBufValid])
+		si.readBufValid = copy(si.readBuf[:], si.readBuf[symbolsSectionLengthWidth+nSymbolsWidth:si.readBufValid])
 
-		si.symbolsBuf[i].Name = uint32(sName)
-		si.symbolsBuf[i].Value = uint32(sValue)
-	}
+		// If not enough space for the symbols, create a new buffer slice and put the old one back in the pool.
+		if nSymbols > cap(si.symbolsBuf) {
+			if si.symbolsBuf != nil {
+				SymbolsPool.Put(si.symbolsBuf)
+			}
+			si.symbolsBuf = SymbolsPool.Get(nSymbols).([]symbol)
+			if nSymbols > cap(si.symbolsBuf) {
+				si.err = fmt.Errorf("could not get a symbols matrix of size %d, actual %d", nSymbols, cap(si.symbolsBuf))
+				return 0, nil, nil, false
+			}
+		}
 
-	si.stats.AddDecompressedLines(1)
-	si.stats.AddDecompressedStructuredMetadataBytes(decompressedStructuredMetadataBytes)
-	si.stats.AddDecompressedBytes(decompressedStructuredMetadataBytes)
-	return ts, line, si.symbolizer.Lookup(si.symbolsBuf[:nSymbols]), true
-    */
+		si.symbolsBuf = si.symbolsBuf[:nSymbols]
+
+		// Read all the symbols, into the buffer.
+		for i := 0; i < nSymbols; i++ {
+			var sName, sValue uint64
+			var nWidth, vWidth, lastAttempt int
+			for vWidth == 0 { // Read until both varints have enough bytes.
+				n, err := si.encReader.Read(si.readBuf[si.readBufValid:])
+				si.readBufValid += n
+				if err != nil {
+					if err != io.EOF {
+						si.err = err
+						return 0, nil, nil, false
+					}
+					if si.readBufValid == 0 { // Got EOF and no data in the buffer.
+						return 0, nil, nil, false
+					}
+					if si.readBufValid == lastAttempt { // Got EOF and could not parse same data last time.
+						si.err = fmt.Errorf("invalid data in chunk")
+						return 0, nil, nil, false
+					}
+				}
+				sName, nWidth = binary.Uvarint(si.readBuf[:si.readBufValid])
+				sValue, vWidth = binary.Uvarint(si.readBuf[nWidth:si.readBufValid])
+				lastAttempt = si.readBufValid
+			}
+
+			// Shift down what is still left in the fixed-size read buffer, if any.
+			si.readBufValid = copy(si.readBuf[:], si.readBuf[nWidth+vWidth:si.readBufValid])
+
+			si.symbolsBuf[i].Name = uint32(sName)
+			si.symbolsBuf[i].Value = uint32(sValue)
+		}
+
+		si.stats.AddDecompressedLines(1)
+		si.stats.AddDecompressedStructuredMetadataBytes(decompressedStructuredMetadataBytes)
+		si.stats.AddDecompressedBytes(decompressedStructuredMetadataBytes)
+		return ts, line, si.symbolizer.Lookup(si.symbolsBuf[:nSymbols]), true
+	*/
 	return ts, line, labels.EmptyLabels(), true
 }
 
@@ -238,7 +240,7 @@ func (si *blockIterator) loadBatch() error {
 		return err
 	}
 
-	si.batch = &batch{
+	si.batch = &Batch{
 		timestamps: timestamps,
 		entries:    entries,
 	}
@@ -286,17 +288,17 @@ func newBlockIterator(ctx context.Context, pool ReaderPool, b []byte, format byt
 type VectorInt []int64
 
 type VectorString struct {
-	offsets    VectorInt
-	lines      []byte
+	offsets VectorInt
+	lines   []byte
 }
 
-type batch struct {
+type Batch struct {
 	timestamps VectorInt
 	entries    VectorString
 }
 
 // Returns the timestamp and line for index i or false
-func (b *batch) Get(i int) (int64, []byte, bool) {
+func (b *Batch) Get(i int) (int64, []byte, bool) {
 	if i < 0 || i >= len(b.timestamps) {
 		return 0, nil, false
 	}
@@ -308,7 +310,7 @@ func (b *batch) Get(i int) (int64, []byte, bool) {
 	return b.timestamps[i], b.entries.lines[prevOffset:b.entries.offsets[i]], true
 }
 
-func (b *batch) Append(ts int64, line []byte) {
+func (b *Batch) Append(ts int64, line []byte) {
 	b.timestamps = append(b.timestamps, ts)
 	b.entries.offsets = append(b.entries.offsets, int64(len(b.entries.lines)))
 	b.entries.lines = append(b.entries.lines, line...)
@@ -326,7 +328,7 @@ func EncodeVectorInt(vec VectorInt, w io.Writer) error {
 	return nil
 }
 
-func DecodeVectorInt(r io.Reader) (VectorInt, error){
+func DecodeVectorInt(r io.Reader) (VectorInt, error) {
 	var l int64
 	if err := binary.Read(r, binary.LittleEndian, &l); err != nil {
 		return nil, err
@@ -365,7 +367,7 @@ func EncodeVectorString(vec VectorString, w io.Writer) error {
 	return nil
 }
 
-func DecodeVectorString(r io.Reader) (VectorString, error){
+func DecodeVectorString(r io.Reader) (VectorString, error) {
 	vec := VectorString{}
 	var err error
 	vec.offsets, err = DecodeVectorInt(r)
@@ -382,7 +384,7 @@ func DecodeVectorString(r io.Reader) (VectorString, error){
 		return vec, err
 	}
 	// TODO: we can avoid this allocation since the the underlying data is
-	// already in memory 
+	// already in memory
 	compressed := make([]byte, cl)
 	_, err = r.Read(compressed)
 	if err != nil {
