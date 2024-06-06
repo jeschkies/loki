@@ -276,6 +276,10 @@ func (p *stubStreamPipeline) Process(_ int64, _ []byte, _ ...labels.Label) ([]by
 	return nil, nil, true
 }
 
+func (p *stubStreamPipeline) ProcessBatch(_ *Batch) ([][]byte, []int64) {
+	return nil, nil
+}
+
 func (p *stubStreamPipeline) ProcessString(_ int64, _ string, _ ...labels.Label) (string, LabelsResult, bool) {
 	return "", nil, true
 }
@@ -392,7 +396,6 @@ func TestDropLabelsPipeline(t *testing.T) {
 			require.Equal(t, tt.wantLabels[i].Hash(), finalLbs.Hash())
 		}
 	}
-
 }
 
 func TestKeepLabelsPipeline(t *testing.T) {
@@ -520,7 +523,6 @@ func TestKeepLabelsPipeline(t *testing.T) {
 			}
 		})
 	}
-
 }
 
 func Benchmark_Pipeline(b *testing.B) {

@@ -112,6 +112,9 @@ func (n noopStreamPipeline) ProcessString(ts int64, line string, structuredMetad
 }
 
 func (_ noopStreamPipeline) ProcessBatch(b *Batch) ([][]byte, []int64) {
+	if b == nil {
+		return nil, nil
+	}
 	return nil, b.Timestamps // TODO: return all lines
 }
 
@@ -244,12 +247,23 @@ func (p *streamPipeline) ProcessString(ts int64, line string, structuredMetadata
 }
 
 func (p *streamPipeline) ProcessBatch(b *Batch) ([][]byte, []int64) {
-	for _, s := range p.stages {
-		line, ok = s.ProcessBatch(ts, line, p.builder) // TODO: fix
-		if !ok {
-			return nil, nil, false
+	// TODO: run stage.ProcessBatch(b) instead
+	// for line := range b.Iter
+	lines := make([][]byte, 0)
+	tss := make([]int64, 0)
+	b.Iter(func(ts int64, line []byte) bool {
+		for _, s := range p.stages {
+			var ok bool
+			line, ok = s.Process(ts, line, p.builder)
+			if !ok {
+				return true
+			}
 		}
-	}
+		lines = append(lines, line)
+		tss = append(tss, ts)
+		return true
+	})
+	return lines, tss
 }
 
 func (p *streamPipeline) BaseLabels() LabelsResult { return p.builder.currentResult }
@@ -343,6 +357,21 @@ func (sp *filteringStreamPipeline) Process(ts int64, line []byte, structuredMeta
 	}
 
 	return sp.pipeline.Process(ts, line, structuredMetadata...)
+}
+
+func (sp *filteringStreamPipeline) ProcessBatch(b *Batch) ([][]byte, []int64) {
+	for _, filter := range sp.filters {
+		if b.Timestamps[0] < filter.start || b.Timestamps[len(b.Timestamps)-1] > filter.end {
+			continue
+		}
+
+		lines, _ := filter.pipeline.ProcessBatch(b)
+		if len(lines) > 0 { // When the filter matches, don't run the next step
+			return nil, nil
+		}
+	}
+
+	return sp.pipeline.ProcessBatch(b)
 }
 
 func (sp *filteringStreamPipeline) ProcessString(ts int64, line string, structuredMetadata ...labels.Label) (string, LabelsResult, bool) {

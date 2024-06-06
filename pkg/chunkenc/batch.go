@@ -49,7 +49,7 @@ func (e *entryBatchIterator) Next() bool {
 	if e.curIndex < len(e.curLines) {
 		e.cur.Timestamp = time.Unix(0, e.curTs[e.curIndex])
 		e.cur.Line = string(e.curLines[e.curIndex])
-		
+		return true	
 	}
 
 	return false
