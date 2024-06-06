@@ -861,6 +861,9 @@ func (nomatchPipeline) ReferencedStructuredMetadata() bool {
 }
 
 func BenchmarkRead(b *testing.B) {
+	filter, err := log.NewFilter("GC", log.LineMatchEqual)
+	require.NoError(b, err)
+	filterPipeline := log.NewStreamPipeline([]log.Stage{filter.ToStage()}, log.NewBaseLabelsBuilder().ForLabels(labels.EmptyLabels(), 0))
 	for _, bs := range testBlockSizes {
 		for _, enc := range testEncoding {
 			name := fmt.Sprintf("%s_%s", enc.String(), humanize.Bytes(uint64(bs)))
@@ -871,7 +874,7 @@ func BenchmarkRead(b *testing.B) {
 				for n := 0; n < b.N; n++ {
 					for _, c := range chunks {
 						// use forward iterator for benchmark -- backward iterator does extra allocations by keeping entries in memory
-						iterator, err := c.Iterator(ctx, time.Unix(0, 0), time.Now(), logproto.FORWARD, nomatchPipeline{})
+						iterator, err := c.Iterator(ctx, time.Unix(0, 0), time.Now(), logproto.FORWARD, filterPipeline)
 						if err != nil {
 							panic(err)
 						}
