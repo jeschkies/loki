@@ -1,6 +1,7 @@
 package log
 
 import (
+	"bytes"
 	"context"
 	"reflect"
 	"sync"
@@ -35,6 +36,7 @@ type StreamPipeline interface {
 // return the line unchanged or allocate a new line.
 type Stage interface {
 	Process(ts int64, line []byte, lbs *LabelsBuilder) ([]byte, bool)
+	// TODO: ProcessBatch(*Batch) *Batch
 	RequiredLabelNames() []string
 }
 
@@ -122,6 +124,11 @@ type noopStage struct{}
 func (noopStage) Process(_ int64, line []byte, _ *LabelsBuilder) ([]byte, bool) {
 	return line, true
 }
+
+func (noopStage) ProcessBatch(b *Batch) *Batch {
+	return b
+}
+
 func (noopStage) RequiredLabelNames() []string { return []string{} }
 
 type StageFunc struct {
@@ -131,6 +138,17 @@ type StageFunc struct {
 
 func (fn StageFunc) Process(ts int64, line []byte, lbs *LabelsBuilder) ([]byte, bool) {
 	return fn.process(ts, line, lbs)
+}
+
+func (fn StageFunc) ProcessBatch(b *Batch) *Batch {
+	r := &Batch{}
+	b.Iter(func(ts int64, line []byte) bool {
+		if l, ok := fn.process(ts, line, nil); ok {
+			r.Append(ts, l)
+		}
+		return true
+	})
+	return r
 }
 
 func (fn StageFunc) RequiredLabelNames() []string {
@@ -244,21 +262,29 @@ func (p *streamPipeline) ProcessString(ts int64, line string, structuredMetadata
 }
 
 func (p *streamPipeline) ProcessBatch(b *Batch) *Batch {
-	// TODO: run stage.ProcessBatch(b) instead
-	// for line := range b.Iter
-	u := &Batch{}
-	b.Iter(func(ts int64, line []byte) bool {
-		for _, s := range p.stages {
-			var ok bool
-			line, ok = s.Process(ts, line, p.builder)
-			if !ok {
-				return true
-			}
+	// TODO: replace hardcoded filter
+	i := 0
+	for i < len(b.Entries.Offsets) {
+		start := b.Entries.Offsets[i]
+		offset := bytes.Index(b.Entries.Lines[start:], []byte("GC"))
+		// offset = memmem.Index(haystack[start:], needleB)
+		if offset == -1 {
+			break
 		}
-		u.Append(ts, line)
-		return true
-	})
-	return u
+
+		// Find first start that is above pos.
+		// TODO: We can probably be branchless here.
+		for i < len(b.Entries.Offsets) && b.Entries.Offsets[i] <= start+int64(offset) {
+			i++
+		}
+	}
+	/*
+		for _, s := range p.stages {
+			// TODO: support other stages
+			b = s.ProcessBatch(s)
+		}
+	*/
+	return b
 }
 
 func (p *streamPipeline) BaseLabels() LabelsResult { return p.builder.currentResult }

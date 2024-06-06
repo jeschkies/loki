@@ -48,7 +48,7 @@ var testEncoding = []Encoding{
 var (
 	testBlockSize  = 256 * 1024
 	testTargetSize = 1500 * 1024
-	testBlockSizes = []int{64 * 1024, 256 * 1024, 512 * 1024}
+	testBlockSizes = []int{64 * 1024, 256 * 1024, 512 * 1024, 1024 * 1024, 4 * 1024 * 1024}
 	countExtractor = func() log.StreamSampleExtractor {
 		ex, err := log.NewLineSampleExtractor(log.CountExtractor, nil, nil, false, false)
 		if err != nil {
