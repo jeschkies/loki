@@ -1017,7 +1017,7 @@ func (p *mockStreamPipeline) Process(ts int64, line []byte, lbs ...labels.Label)
 	return p.wrappedSP.Process(ts, line, lbs...)
 }
 
-func (p *mockStreamPipeline) ProcessBatch(batch *lokilog.Batch) ([][]byte, []int64) {
+func (p *mockStreamPipeline) ProcessBatch(batch *lokilog.Batch) *lokilog.Batch {
 	p.called++
 	return p.wrappedSP.ProcessBatch(batch)
 }

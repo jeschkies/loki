@@ -26,7 +26,7 @@ type StreamPipeline interface {
 	// The buffer returned for the log line can be reused on subsequent calls to Process and therefore must be copied.
 	Process(ts int64, line []byte, structuredMetadata ...labels.Label) (resultLine []byte, resultLabels LabelsResult, matches bool)
 	ProcessString(ts int64, line string, structuredMetadata ...labels.Label) (resultLine string, resultLabels LabelsResult, matches bool)
-	ProcessBatch(batch *Batch) (lines [][]byte, ts []int64)
+	ProcessBatch(batch *Batch) *Batch
 	ReferencedStructuredMetadata() bool
 }
 
@@ -111,11 +111,8 @@ func (n noopStreamPipeline) ProcessString(ts int64, line string, structuredMetad
 	return line, lr, ok
 }
 
-func (_ noopStreamPipeline) ProcessBatch(b *Batch) ([][]byte, []int64) {
-	if b == nil {
-		return nil, nil
-	}
-	return nil, b.Timestamps // TODO: return all lines
+func (_ noopStreamPipeline) ProcessBatch(b *Batch) *Batch {
+	return b
 }
 
 func (n noopStreamPipeline) BaseLabels() LabelsResult { return n.builder.currentResult }
@@ -246,11 +243,10 @@ func (p *streamPipeline) ProcessString(ts int64, line string, structuredMetadata
 	return string(lb), lr, ok
 }
 
-func (p *streamPipeline) ProcessBatch(b *Batch) ([][]byte, []int64) {
+func (p *streamPipeline) ProcessBatch(b *Batch) *Batch {
 	// TODO: run stage.ProcessBatch(b) instead
 	// for line := range b.Iter
-	lines := make([][]byte, 0)
-	tss := make([]int64, 0)
+	u := &Batch{}
 	b.Iter(func(ts int64, line []byte) bool {
 		for _, s := range p.stages {
 			var ok bool
@@ -259,11 +255,10 @@ func (p *streamPipeline) ProcessBatch(b *Batch) ([][]byte, []int64) {
 				return true
 			}
 		}
-		lines = append(lines, line)
-		tss = append(tss, ts)
+		u.Append(ts, line)
 		return true
 	})
-	return lines, tss
+	return u
 }
 
 func (p *streamPipeline) BaseLabels() LabelsResult { return p.builder.currentResult }
@@ -359,15 +354,15 @@ func (sp *filteringStreamPipeline) Process(ts int64, line []byte, structuredMeta
 	return sp.pipeline.Process(ts, line, structuredMetadata...)
 }
 
-func (sp *filteringStreamPipeline) ProcessBatch(b *Batch) ([][]byte, []int64) {
+func (sp *filteringStreamPipeline) ProcessBatch(b *Batch) *Batch {
 	for _, filter := range sp.filters {
 		if b.Timestamps[0] < filter.start || b.Timestamps[len(b.Timestamps)-1] > filter.end {
 			continue
 		}
 
-		lines, _ := filter.pipeline.ProcessBatch(b)
-		if len(lines) > 0 { // When the filter matches, don't run the next step
-			return nil, nil
+		u := filter.pipeline.ProcessBatch(b)
+		if len(u.Timestamps) > 0 { // When the filter matches, don't run the next step
+			return u
 		}
 	}
 

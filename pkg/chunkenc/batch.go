@@ -26,8 +26,7 @@ type entryBatchIterator struct {
 	cur        logproto.Entry
 	currLabels log.LabelsResult
 
-	curLines [][]byte
-	curTs    []int64
+	curBatch *log.Batch
 	curIndex int
 }
 
@@ -40,16 +39,17 @@ func (e *entryBatchIterator) Labels() string { return e.currLabels.String() }
 func (e *entryBatchIterator) StreamHash() uint64 { return e.pipeline.BaseLabels().Hash() }
 
 func (e *entryBatchIterator) Next() bool {
-	if e.curLines == nil {
+	if e.curBatch == nil {
 		e.blockIterator.Load()
-		e.curLines, e.curTs = e.pipeline.ProcessBatch(e.blockIterator.batch)
+		e.curBatch = e.pipeline.ProcessBatch(e.blockIterator.batch)
 		e.curIndex = -1
 	}
 	e.curIndex++
-	if e.curIndex < len(e.curLines) {
-		e.cur.Timestamp = time.Unix(0, e.curTs[e.curIndex])
-		e.cur.Line = string(e.curLines[e.curIndex])
-		return true	
+	if e.curIndex < len(e.batch.Timestamps) {
+		ts, l, ok := e.batch.Get(e.curIndex)
+		e.cur.Timestamp = time.Unix(0, ts)
+		e.cur.Line = string(l)
+		return ok
 	}
 
 	return false
