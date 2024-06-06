@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"sync"
 
 	//"fmt"
 	"io"
@@ -17,6 +18,33 @@ import (
 	"github.com/grafana/loki/v3/pkg/logql/log"
 	"github.com/grafana/loki/v3/pkg/logqlmodel/stats"
 )
+
+// SlicePool uses a bucket pool and wraps the Get() and Put() functions for
+// simpler access.
+type SlicePool[T any] struct {
+	p *sync.Pool
+}
+
+func NewSlicePool[T any](i int) *SlicePool[T] {
+	return &SlicePool[T]{
+		p: &sync.Pool{
+			New: func() any {
+				return make([]T, i)
+			},
+		},
+	}
+}
+
+func (sp *SlicePool[T]) Get(n int) []T {
+	b := sp.p.Get().([]T)
+	return b[:n]
+}
+
+func (sp *SlicePool[T]) Put(buf []T) {
+	sp.p.Put(buf[0:0])
+}
+
+var decodePool = NewSlicePool[byte](4 * 1024 * 1024)
 
 type entryBatchIterator struct {
 	*blockIterator
@@ -272,6 +300,11 @@ func (si *blockIterator) close() {
 		si.symbolsBuf = nil
 	}
 
+	if si.batch != nil {
+		decodePool.Put(si.batch.Entries.Lines)
+		si.batch = nil
+	}
+
 	si.origBytes = nil
 }
 
@@ -357,12 +390,13 @@ func DecodeVectorString(r io.Reader) (log.VectorString, error) {
 	}
 	// TODO: we can avoid this allocation since the the underlying data is
 	// already in memory
-	compressed := make([]byte, cl)
+	compressed := decodePool.Get(int(cl))
+	defer decodePool.Put(compressed)
 	_, err = r.Read(compressed)
 	if err != nil {
 		return vec, err
 	}
-	vec.Lines = make([]byte, l)
+	vec.Lines = decodePool.Get(int(l))
 	_, err = lz4.UncompressBlock(compressed, vec.Lines)
 	return vec, err
 }
