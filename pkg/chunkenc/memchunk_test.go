@@ -871,6 +871,7 @@ func BenchmarkRead(b *testing.B) {
 			b.Run(name, func(b *testing.B) {
 				chunks, size := generateData(enc, 5, bs, testTargetSize)
 				_, ctx := stats.NewContext(context.Background())
+				b.ReportAllocs()
 				b.ResetTimer()
 				for n := 0; n < b.N; n++ {
 					for _, c := range chunks {
