@@ -98,7 +98,6 @@ func TestBlocksInclusive(t *testing.T) {
 			require.Equal(t, 1, blocks[0].Entries())
 		}
 	}
-
 }
 
 func TestBlock(t *testing.T) {
@@ -384,7 +383,6 @@ func TestRoundtripV2(t *testing.T) {
 				assertLines(loaded)
 			})
 		}
-
 	}
 }
 
@@ -853,13 +851,16 @@ func (nomatchPipeline) BaseLabels() log.LabelsResult { return log.EmptyLabelsRes
 func (nomatchPipeline) Process(_ int64, line []byte, _ ...labels.Label) ([]byte, log.LabelsResult, bool) {
 	return line, nil, false
 }
+
 func (nomatchPipeline) ProcessString(_ int64, line string, _ ...labels.Label) (string, log.LabelsResult, bool) {
 	return line, nil, false
 }
+
 func (nomatchPipeline) ReferencedStructuredMetadata() bool {
 	return false
 }
 
+// THE BENCHMARK
 func BenchmarkRead(b *testing.B) {
 	filter, err := log.NewFilter("GC", log.LineMatchEqual)
 	require.NoError(b, err)
@@ -887,31 +888,6 @@ func BenchmarkRead(b *testing.B) {
 					}
 				}
 				b.SetBytes(int64(size))
-			})
-		}
-	}
-
-	for _, bs := range testBlockSizes {
-		for _, enc := range testEncoding {
-			name := fmt.Sprintf("sample_%s_%s", enc.String(), humanize.Bytes(uint64(bs)))
-			b.Run(name, func(b *testing.B) {
-				chunks, size := generateData(enc, 5, bs, testTargetSize)
-				_, ctx := stats.NewContext(context.Background())
-				b.ResetTimer()
-				bytesRead := uint64(0)
-				for n := 0; n < b.N; n++ {
-					for _, c := range chunks {
-						iterator := c.SampleIterator(ctx, time.Unix(0, 0), time.Now(), countExtractor)
-						for iterator.Next() {
-							_ = iterator.Sample()
-						}
-						if err := iterator.Close(); err != nil {
-							b.Fatal(err)
-						}
-					}
-					bytesRead += size
-				}
-				b.SetBytes(int64(bytesRead) / int64(b.N))
 			})
 		}
 	}
@@ -1714,7 +1690,6 @@ func TestMemChunk_SpaceFor(t *testing.T) {
 					require.Equal(t, expect, chk.SpaceFor(&tc.entry))
 				})
 			}
-
 		})
 	}
 }
