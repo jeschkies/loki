@@ -101,7 +101,6 @@ func TestBlocksInclusive(t *testing.T) {
 			require.Equal(t, 1, blocks[0].Entries())
 		}
 	}
-
 }
 
 func TestBlock(t *testing.T) {
@@ -387,7 +386,6 @@ func TestRoundtripV2(t *testing.T) {
 				assertLines(loaded)
 			})
 		}
-
 	}
 }
 
@@ -856,9 +854,11 @@ func (nomatchPipeline) BaseLabels() log.LabelsResult { return log.EmptyLabelsRes
 func (nomatchPipeline) Process(_ int64, line []byte, _ ...labels.Label) ([]byte, log.LabelsResult, bool) {
 	return line, nil, false
 }
+
 func (nomatchPipeline) ProcessString(_ int64, line string, _ ...labels.Label) (string, log.LabelsResult, bool) {
 	return line, nil, false
 }
+
 func (nomatchPipeline) ReferencedStructuredMetadata() bool {
 	return false
 }
@@ -869,11 +869,12 @@ func BenchmarkRead(b *testing.B) {
 	require.NoError(b, err)
 	filterPipeline := log.NewStreamPipeline([]log.Stage{filter.ToStage()}, log.NewBaseLabelsBuilder().ForLabels(labels.EmptyLabels(), 0))
 	for _, bs := range testBlockSizes {
-		for _, enc := range []Encoding{EncSnappy} { //testEncoding {
+		for _, enc := range []Encoding{EncSnappy} { // testEncoding {
 			name := fmt.Sprintf("%s_%s", enc.String(), humanize.Bytes(uint64(bs)))
 			b.Run(name, func(b *testing.B) {
 				chunks, size := generateData(enc, 5, bs, testTargetSize)
 				_, ctx := stats.NewContext(context.Background())
+				b.ReportAllocs()
 				b.ResetTimer()
 				for n := 0; n < b.N; n++ {
 					for _, c := range chunks {
@@ -1720,7 +1721,6 @@ func TestMemChunk_SpaceFor(t *testing.T) {
 					require.Equal(t, expect, chk.SpaceFor(&tc.entry))
 				})
 			}
-
 		})
 	}
 }
