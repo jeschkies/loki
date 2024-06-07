@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/binary"
 	"sync"
+	"unsafe"
 
 	//"fmt"
 	"io"
@@ -76,11 +77,16 @@ func (e *entryBatchIterator) Next() bool {
 	if e.curIndex < len(e.batch.Timestamps) {
 		ts, l, ok := e.batch.Get(e.curIndex)
 		e.cur.Timestamp = time.Unix(0, ts)
-		e.cur.Line = string(l)
+		// TODO: there must be a better way
+		e.cur.Line = yoloString(l)
 		return ok
 	}
 
 	return false
+}
+
+func yoloString(buf []byte) string {
+	return *((*string)(unsafe.Pointer(&buf)))
 }
 
 func (e *entryBatchIterator) Close() error {
