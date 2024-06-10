@@ -74,8 +74,8 @@ func (e *entryBatchIterator) Next() bool {
 		e.curIndex = -1
 	}
 	e.curIndex++
-	if e.curIndex < len(e.batch.Timestamps) {
-		ts, l, ok := e.batch.Get(e.curIndex)
+	if e.curIndex < len(e.batch.Selection) {
+		ts, l, ok := e.batch.Get(e.batch.Selection[e.curIndex])
 		e.cur.Timestamp = time.Unix(0, ts)
 		// TODO: there must be a better way
 		e.cur.Line = yoloString(l)
