@@ -263,7 +263,7 @@ func (p *streamPipeline) ProcessString(ts int64, line string, structuredMetadata
 
 func (p *streamPipeline) ProcessBatch(b *Batch) *Batch {
 	// TODO: replace hardcoded filter
-	selection := make([]int, 0)
+	selection := make([]int, 0, len(b.Timestamps))
 	i := 0
 	for i < len(b.Entries.Offsets) {
 		start := b.Entries.Offsets[i]
