@@ -45,7 +45,10 @@ func (sp *SlicePool[T]) Put(buf []T) {
 	sp.p.Put(buf[0:0])
 }
 
-var decodePool = NewSlicePool[byte](4 * 1024 * 1024)
+var (
+	decodePool      = NewSlicePool[byte](4 * 1024 * 1024)
+	decodeInt64Pool = NewSlicePool[uint64](4 * 1024 * 1024)
+)
 
 type entryBatchIterator struct {
 	*blockIterator
@@ -344,7 +347,9 @@ func DecodeVectorInt(r io.Reader) (log.VectorInt, error) {
 	if err := binary.Read(r, binary.LittleEndian, &l); err != nil {
 		return nil, err
 	}
-	compressed := make([]uint64, l)
+	// TODO: use underlying raw bytes
+	compressed := decodeInt64Pool.Get(int(l))
+	defer decodeInt64Pool.Put(compressed)
 	if err := binary.Read(r, binary.LittleEndian, compressed); err != nil {
 		return nil, err
 	}
