@@ -3,7 +3,9 @@ package logql
 import (
 	"context"
 	"fmt"
+	"iter"
 	"math"
+	"slices"
 	"testing"
 	"time"
 
@@ -90,7 +92,7 @@ func TestMappingEquivalence(t *testing.T) {
 	} {
 		q := NewMockQuerier(
 			shards,
-			streams,
+			func() iter.Seq2[int, logproto.Stream] { return slices.All(streams) },
 		)
 
 		opts := EngineOpts{}
@@ -199,7 +201,7 @@ func TestMappingEquivalenceSketches(t *testing.T) {
 	} {
 		q := NewMockQuerier(
 			shards,
-			streams,
+			func() iter.Seq2[int, logproto.Stream] { return slices.All(streams) },
 		)
 
 		opts := EngineOpts{
@@ -353,7 +355,7 @@ func TestApproxTopkSketches(t *testing.T) {
 
 			q := NewMockQuerier(
 				tc.labelShards,
-				streams,
+				func() iter.Seq2[int, logproto.Stream] { return slices.All(streams) },
 			)
 
 			opts := EngineOpts{
@@ -433,7 +435,7 @@ func TestShardCounter(t *testing.T) {
 	} {
 		q := NewMockQuerier(
 			shards,
-			streams,
+			func() iter.Seq2[int, logproto.Stream] { return slices.All(streams) },
 		)
 
 		opts := EngineOpts{}
@@ -692,7 +694,7 @@ func TestRangeMappingEquivalence(t *testing.T) {
 	} {
 		q := NewMockQuerier(
 			shards,
-			streams,
+			func() iter.Seq2[int, logproto.Stream] { return slices.All(streams) },
 		)
 
 		opts := EngineOpts{}
