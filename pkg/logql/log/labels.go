@@ -1,3 +1,5 @@
+//go:build !stringlabels
+
 package log
 
 import (
@@ -98,17 +100,6 @@ func (h *hasher) Hash(lbs labels.Labels) uint64 {
 	hash, h.buf = lbs.HashWithoutLabels(h.buf, []string(nil)...)
 	return hash
 }
-
-type LabelCategory int
-
-const (
-	StreamLabel LabelCategory = iota
-	StructuredMetadataLabel
-	ParsedLabel
-	InvalidCategory
-
-	numValidCategories = 3
-)
 
 var allCategories = []LabelCategory{
 	StreamLabel,
@@ -528,32 +519,6 @@ func (b *LabelsBuilder) UnsortedLabels(buf labels.Labels, categories ...LabelCat
 
 	return buf
 }
-
-type stringMapPool struct {
-	pool sync.Pool
-}
-
-func newStringMapPool() *stringMapPool {
-	return &stringMapPool{
-		pool: sync.Pool{
-			New: func() interface{} {
-				return make(map[string]string)
-			},
-		},
-	}
-}
-
-func (s *stringMapPool) Get() map[string]string {
-	m := s.pool.Get().(map[string]string)
-	clear(m)
-	return m
-}
-
-func (s *stringMapPool) Put(m map[string]string) {
-	s.pool.Put(m)
-}
-
-var smp = newStringMapPool()
 
 // puts labels entries into an existing map, it is up to the caller to
 // properly clear the map if it is going to be reused
