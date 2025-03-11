@@ -144,6 +144,10 @@ type BaseLabelsBuilder struct {
 
 	resultCache map[uint64]LabelsResult
 	*hasher
+
+	data   []byte
+	keys   []string
+	values []string
 }
 
 // LabelsBuilder is the same as labels.Builder but tailored for this package.
@@ -205,6 +209,13 @@ func (b *BaseLabelsBuilder) ForLabels(lbs labels.Labels, hash uint64) *LabelsBui
 	return res
 }
 
+func (b *BaseLabelsBuilder) SetBytes(k, v []byte) {
+	b.data = append(b.data, k...)
+    b.keys = append(b.keys, unsafeGetString(b.data[len(b.data)-len(k):]))
+	b.data = append(b.data, v...)
+    b.values= append(b.values, unsafeGetString(b.data[len(b.data)-len(v):]))
+}
+
 // Reset clears all current state for the builder.
 func (b *BaseLabelsBuilder) Reset() {
 	b.del = b.del[:0]
@@ -215,6 +226,10 @@ func (b *BaseLabelsBuilder) Reset() {
 	b.errDetails = ""
 	b.baseMap = nil
 	b.parserKeyHints.Reset()
+
+	b.data = b.data[:0]
+	b.keys = b.keys[:0]
+	b.values = b.values[:0]
 }
 
 // ParserLabelHints returns a limited list of expected labels to extract for metric queries.
@@ -793,7 +808,7 @@ type internedStringSet map[string]struct {
 }
 
 func (i internedStringSet) Get(data []byte, createNew func() (string, bool)) (string, bool) {
-	s, ok := i[string(data)]
+	s, ok := i[unsafeGetString(data)]
 	if ok {
 		return s.s, s.ok
 	}

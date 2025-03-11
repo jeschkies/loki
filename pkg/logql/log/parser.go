@@ -56,6 +56,8 @@ type JSONParser struct {
 
 	keys        internedStringSet
 	parserHints ParserHint
+
+	buf []byte
 }
 
 // NewJSONParser creates a log stage that can parse a json log line and add properties as labels.
@@ -63,6 +65,7 @@ func NewJSONParser() *JSONParser {
 	return &JSONParser{
 		prefixBuffer: make([]byte, 0, 1024),
 		keys:         internedStringSet{},
+		buf:          make([]byte, 0, 1024),
 	}
 }
 
@@ -145,7 +148,10 @@ func (j *JSONParser) parseLabelValue(key, value []byte, dataType jsonparser.Valu
 		if !ok {
 			return nil
 		}
-		j.lbs.Set(ParsedLabel, key, readValue(value, dataType))
+
+		j.buf = readValueBytes(value, j.buf)
+		j.lbs.SetBytes(unsafeGetBytes(key), j.buf)
+		j.buf = j.buf[:0]
 		if !j.parserHints.ShouldContinueParsingLine(key, j.lbs) {
 			return errLabelDoesNotMatch
 		}
@@ -175,7 +181,9 @@ func (j *JSONParser) parseLabelValue(key, value []byte, dataType jsonparser.Valu
 		return nil
 	}
 
-	j.lbs.Set(ParsedLabel, keyString, readValue(value, dataType))
+	j.buf = readValueBytes(value, j.buf)
+	j.lbs.SetBytes(unsafeGetBytes(keyString), j.buf)
+	j.buf = j.buf[:0]
 	if !j.parserHints.ShouldContinueParsingLine(keyString, j.lbs) {
 		return errLabelDoesNotMatch
 	}
@@ -200,6 +208,16 @@ func readValue(v []byte, dataType jsonparser.ValueType) string {
 	default:
 		return ""
 	}
+}
+
+// TODO: support other types
+func readValueBytes(b, buf []byte) []byte {
+	bU, err := jsonparser.Unescape(b, buf[:])
+	if err != nil {
+		return nil
+	}
+	return bU
+	// TODO: error check
 }
 
 func unescapeJSONString(b []byte) string {

@@ -665,6 +665,11 @@ func Benchmark_Parser(b *testing.B) {
 			b.Run("no labels hints", func(b *testing.B) {
 				b.ReportAllocs()
 				builder := NewBaseLabelsBuilder().ForLabels(lbs, lbs.Hash())
+
+				builder.data = make([]byte, 0, 1024)
+				builder.keys = make([]string, 0, 1024)
+				builder.values = make([]string, 0, 1024)
+
 				for n := 0; n < b.N; n++ {
 					builder.Reset()
 					_, _ = tt.s.Process(0, line, builder)
@@ -726,6 +731,7 @@ func BenchmarkKeyExtraction(b *testing.B) {
 	}
 	for _, bb := range benchmarks {
 		b.Run(bb.name, func(b *testing.B) {
+			b.ReportAllocs()
 			b.ResetTimer()
 
 			for n := 0; n < b.N; n++ {
