@@ -362,9 +362,9 @@ func (v *variantsStreamSampleExtractorWrapper) BaseLabels() LabelsResult {
 func (v *variantsStreamSampleExtractorWrapper) Process(
 	ts int64,
 	line []byte,
-	structuredMetadata ...labels.Label,
+	structuredMetadata labels.Labels,
 ) (float64, LabelsResult, bool) {
-	n, lbls, ok := v.StreamSampleExtractor.Process(ts, line, structuredMetadata...)
+	n, lbls, ok := v.StreamSampleExtractor.Process(ts, line, structuredMetadata)
 	if !ok {
 		return n, lbls, ok
 	}
@@ -375,9 +375,9 @@ func (v *variantsStreamSampleExtractorWrapper) Process(
 func (v *variantsStreamSampleExtractorWrapper) ProcessString(
 	ts int64,
 	line string,
-	structuredMetadata ...labels.Label,
+	structuredMetadata labels.Labels,
 ) (float64, LabelsResult, bool) {
-	n, lbls, ok := v.StreamSampleExtractor.ProcessString(ts, line, structuredMetadata...)
+	n, lbls, ok := v.StreamSampleExtractor.ProcessString(ts, line, structuredMetadata)
 	if !ok {
 		return n, lbls, ok
 	}
@@ -386,13 +386,13 @@ func (v *variantsStreamSampleExtractorWrapper) ProcessString(
 }
 
 func appendVariantLabel(lbls LabelsResult, variantIndex int) LabelsResult {
-	newLbls := lbls.Stream()
-	newLbls = append(newLbls, labels.Label{
+	newLbls := labels.NewBuilder(lbls.Stream())
+	newLbls.Add(labels.Label{
 		Name:  "__variant__",
 		Value: strconv.Itoa(variantIndex),
 	})
 	builder := NewBaseLabelsBuilder().ForLabels(newLbls, newLbls.Hash())
-	builder.Add(StructuredMetadataLabel, lbls.StructuredMetadata()...)
-	builder.Add(ParsedLabel, lbls.Parsed()...)
+	builder.Add(StructuredMetadataLabel, lbls.StructuredMetadata())
+	builder.Add(ParsedLabel, lbls.Parsed())
 	return builder.LabelsResult()
 }

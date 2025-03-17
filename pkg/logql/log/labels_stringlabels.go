@@ -55,6 +55,13 @@ func (b *LabelsBuilder) Set(category LabelCategory, n, v string) *LabelsBuilder 
 	return b
 }
 
+func (b *LabelsBuilder) Add(category LabelCategory, lbls labels.Labels) *LabelsBuilder {
+	lbls.Range(func(l labels.Label) {
+		b.ScratchBuilder.Add(l.Name, l.Value)
+	})
+	return b
+}
+
 func (b *LabelsBuilder) IntoMap(m map[string]string) {
 	panic("not implemented")
 }
