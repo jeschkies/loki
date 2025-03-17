@@ -6,9 +6,25 @@ import (
 	"github.com/prometheus/prometheus/model/labels"
 )
 
+// BaseLabelsBuilder is a label builder used by pipeline and stages.
+// Only one base builder is used and it contains cache for each LabelsBuilders.
+type BaseLabelsBuilder struct {
+}
 
+// NewBaseLabelsBuilder creates a new base labels builder.
+func NewBaseLabelsBuilder() *BaseLabelsBuilder {
+	return &BaseLabelsBuilder{}
+}
+
+// ForLabels creates a labels builder for a given labels set as base.
+// The labels cache is shared across all created LabelsBuilders.
+func (b *BaseLabelsBuilder) ForLabels(lbs labels.Labels, hash uint64) *LabelsBuilder {
+	return &LabelsBuilder{
+		ScratchBuilder: labels.NewScratchBuilder(lbs.Len()),
+	}
+}
 type LabelsBuilder struct {
-	*labels.ScratchBuilder
+	labels.ScratchBuilder
 
 	// nolint:structcheck
 	// https://github.com/golangci/golangci-lint/issues/826
@@ -84,4 +100,46 @@ func (b *LabelsBuilder) GetErrorDetails() string {
 
 func (b *LabelsBuilder) HasErrorDetails() bool {
 	return b.errDetails != ""
+}
+
+func (b *LabelsBuilder) UnsortedLabels(buf labels.Labels, categories ...LabelCategory) labels.Labels {
+	// TODO: this is not performant. Use columnar builder instead
+	return b.ScratchBuilder.Labels()
+}
+
+func (b *LabelsBuilder) LabelsResult() LabelsResult {
+	return &labelsResult{
+		labels: b.ScratchBuilder.Labels(),
+	}
+}
+
+type labelsResult struct {
+	labels labels.Labels
+}
+
+func (l *labelsResult) String() string {
+	return l.labels.String()
+}
+
+func (l *labelsResult) Labels() labels.Labels {
+	return l.labels
+}
+
+func (l *labelsResult) Hash() uint64 {
+	return l.labels.Hash()
+}
+
+
+func (l *labelsResult) Stream() labels.Labels {
+	return l.labels
+}
+
+func (l *labelsResult) StructuredMetadata() labels.Labels {
+	// TODO: distinguis
+	return l.labels
+}
+
+func (l *labelsResult) Parsed() labels.Labels {
+	// TODO: distinguish between parsed and structured metadata
+	return l.labels
 }

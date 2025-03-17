@@ -504,7 +504,7 @@ func entries(n int, t time.Time) []logproto.Entry {
 var labelNames = []string{"app", "instance", "namespace", "user", "cluster", ShardLbName}
 
 func makeRandomLabels() labels.Labels {
-	ls := labels.NewBuilder(nil)
+	ls := labels.NewBuilder(labels.Labels{})
 	for _, ln := range labelNames {
 		ls.Set(ln, fmt.Sprintf("%d", rand.Int31()))
 	}
@@ -1035,14 +1035,14 @@ func (p *mockStreamExtractor) BaseLabels() log.LabelsResult {
 	return p.wrappedSP.BaseLabels()
 }
 
-func (p *mockStreamExtractor) Process(ts int64, line []byte, lbs ...labels.Label) (float64, log.LabelsResult, bool) {
+func (p *mockStreamExtractor) Process(ts int64, line []byte, lbs labels.Labels) (float64, log.LabelsResult, bool) {
 	p.called++
-	return p.wrappedSP.Process(ts, line, lbs...)
+	return p.wrappedSP.Process(ts, line, lbs)
 }
 
-func (p *mockStreamExtractor) ProcessString(ts int64, line string, lbs ...labels.Label) (float64, log.LabelsResult, bool) {
+func (p *mockStreamExtractor) ProcessString(ts int64, line string, lbs labels.Labels) (float64, log.LabelsResult, bool) {
 	p.called++
-	return p.wrappedSP.ProcessString(ts, line, lbs...)
+	return p.wrappedSP.ProcessString(ts, line, lbs)
 }
 
 func Test_QueryWithDelete(t *testing.T) {

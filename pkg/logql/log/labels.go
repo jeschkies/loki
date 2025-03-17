@@ -17,17 +17,6 @@ const MaxInternedStrings = 1024
 
 var EmptyLabelsResult = NewLabelsResult(labels.EmptyLabels().String(), labels.EmptyLabels().Hash(), labels.EmptyLabels(), labels.EmptyLabels(), labels.EmptyLabels())
 
-// LabelsResult is a computed labels result that contains the labels set with associated string and hash.
-// The is mainly used for caching and returning labels computations out of pipelines and stages.
-type LabelsResult interface {
-	String() string
-	Labels() labels.Labels
-	Stream() labels.Labels
-	StructuredMetadata() labels.Labels
-	Parsed() labels.Labels
-	Hash() uint64
-}
-
 // NewLabelsResult creates a new LabelsResult.
 // It takes the string representation of the labels, the hash of the labels and the labels categorized.
 func NewLabelsResult(allLabelsStr string, hash uint64, stream, structuredMetadata, parsed labels.Labels) LabelsResult {

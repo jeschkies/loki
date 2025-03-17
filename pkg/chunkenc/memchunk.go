@@ -1739,7 +1739,7 @@ type sampleBufferedIterator struct {
 
 func (e *sampleBufferedIterator) Next() bool {
 	for e.bufferedIterator.Next() {
-		val, labels, ok := e.extractor.Process(e.currTs, e.currLine, e.currStructuredMetadata...)
+		val, labels, ok := e.extractor.Process(e.currTs, e.currLine, e.currStructuredMetadata)
 		if !ok {
 			continue
 		}
