@@ -104,14 +104,16 @@ func (v CountMinSketchVector) ToProto() (*logproto.CountMinSketchVector, error) 
 	// Serialize metric labels
 	for i, metric := range v.Metrics {
 		p.Metrics[i] = &logproto.Labels{
-			Metric: make([]*logproto.LabelPair, len(metric)),
+			Metric: make([]*logproto.LabelPair, metric.Len()),
 		}
-		for j, pair := range metric {
+		var j int
+		metric.Range(func(pair labels.Label) {
 			p.Metrics[i].Metric[j] = &logproto.LabelPair{
 				Name:  pair.Name,
 				Value: pair.Value,
 			}
-		}
+			j++
+		})
 	}
 
 	return p, nil
@@ -144,12 +146,11 @@ func CountMinSketchVectorFromProto(p *logproto.CountMinSketchVector) (CountMinSk
 
 	// Deserialize metric labels
 	for i, in := range p.Metrics {
-		lbls := make(labels.Labels, len(in.Metric))
-		for j, labelPair := range in.Metric {
-			lbls[j].Name = labelPair.Name
-			lbls[j].Value = labelPair.Value
+		lb := labels.NewScratchBuilder(len(in.Metric))
+		for _, labelPair := range in.Metric {
+			lb.Add(labelPair.Name, labelPair.Value)
 		}
-		vec.Metrics[i] = lbls
+		vec.Metrics[i] = lb.Labels()
 	}
 
 	return vec, nil

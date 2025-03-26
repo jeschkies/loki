@@ -35,8 +35,8 @@ type SampleExtractor interface {
 // A StreamSampleExtractor never mutate the received line.
 type StreamSampleExtractor interface {
 	BaseLabels() LabelsResult
-	Process(ts int64, line []byte, structuredMetadata ...labels.Label) (float64, LabelsResult, bool)
-	ProcessString(ts int64, line string, structuredMetadata ...labels.Label) (float64, LabelsResult, bool)
+	Process(ts int64, line []byte, structuredMetadata labels.Labels) (float64, LabelsResult, bool)
+	ProcessString(ts int64, line string, structuredMetadata labels.Labels) (float64, LabelsResult, bool)
 	ReferencedStructuredMetadata() bool
 }
 
