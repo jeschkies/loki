@@ -901,7 +901,7 @@ func TestStreamShardAcrossCalls(t *testing.T) {
 			lbls, err := syntax.ParseLabels(s.Stream.Labels)
 			require.NoError(t, err)
 
-			require.Equal(t, lbls[0].Value, fmt.Sprint(i))
+			require.Equal(t, lbls.Get(ingester.ShardLbName), fmt.Sprint(i))
 		}
 
 		derivedStreams = d.shardStream(baseStream, streamRate, "fake")
@@ -912,7 +912,7 @@ func TestStreamShardAcrossCalls(t *testing.T) {
 			lbls, err := syntax.ParseLabels(s.Stream.Labels)
 			require.NoError(t, err)
 
-			require.Equal(t, lbls[0].Value, fmt.Sprint(i+2))
+			require.Equal(t, lbls.Get(ingester.ShardLbName), fmt.Sprint(i+2))
 		}
 	})
 }
@@ -1306,16 +1306,10 @@ func TestParseStreamLabels(t *testing.T) {
 				limits.MaxLabelNamesPerSeries = 1
 				return limits
 			},
-			expectedLabels: labels.Labels{
-				{
-					Name:  "foo",
-					Value: "bar",
-				},
-				{
-					Name:  loghttp_push.LabelServiceName,
-					Value: loghttp_push.ServiceUnknown,
-				},
-			},
+			expectedLabels: labels.FromStrings(
+				"foo", "bar",
+				loghttp_push.LabelServiceName, loghttp_push.ServiceUnknown,
+			),
 		},
 	} {
 		limits := tc.generateLimits()
