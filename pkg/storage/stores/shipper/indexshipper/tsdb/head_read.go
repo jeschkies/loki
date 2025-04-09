@@ -117,7 +117,9 @@ func (h *headIndexReader) Series(ref storage.SeriesRef, from int64, through int6
 		h.head.metrics.seriesNotFound.Inc()
 		return 0, storage.ErrNotFound
 	}
-	*lbls = append((*lbls)[:0], s.ls...)
+	// TODO: verify this works for slicelabels and stringlabels
+	// Maybe inject a labels.Builder instead
+	*lbls = s.ls//append((*lbls)[:0], s.ls...)
 
 	queryBounds := newBounds(model.Time(from), model.Time(through))
 
@@ -142,14 +144,16 @@ func (h *headIndexReader) ChunkStats(ref storage.SeriesRef, from, through int64,
 		return 0, index.ChunkStats{}, storage.ErrNotFound
 	}
 	if len(by) == 0 {
-		*lbls = append((*lbls)[:0], s.ls...)
+		*lbls = s.ls//append((*lbls)[:0], s.ls...)
 	} else {
-		*lbls = (*lbls)[:0]
-		for _, l := range s.ls {
+		// TODO: creating a new builder every time is not efficient
+		lblsBuilder := labels.NewBuilder(labels.EmptyLabels())
+		s.ls.Range(func(l labels.Label) {
 			if _, ok := by[l.Name]; ok {
-				*lbls = append(*lbls, l)
+				lblsBuilder.Set(l.Name, l.Value)
 			}
-		}
+		})
+		*lbls = lblsBuilder.Labels()
 	}
 
 	queryBounds := newBounds(model.Time(from), model.Time(through))
@@ -191,9 +195,9 @@ func (h *headIndexReader) LabelNamesFor(ids ...storage.SeriesRef) ([]string, err
 		if memSeries == nil {
 			return nil, storage.ErrNotFound
 		}
-		for _, lbl := range memSeries.ls {
-			namesMap[lbl.Name] = struct{}{}
-		}
+		memSeries.ls.Range(func(l labels.Label) {
+			namesMap[l.Name] = struct{}{}
+		})
 	}
 	names := make([]string, 0, len(namesMap))
 	for name := range namesMap {

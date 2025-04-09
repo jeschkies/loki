@@ -80,6 +80,7 @@ func (sm *seriesLabelsMapper) Get(seriesID []byte, userID []byte) labels.Labels 
 }
 
 func (sm *seriesLabelsMapper) build() error {
+	lbsBuilder := labels.NewBuilder(labels.EmptyLabels())
 Outer:
 	for k, v := sm.cursor.First(); k != nil; k, v = sm.cursor.Next() {
 		ref, ok, err := parseLabelSeriesRangeKey(decodeKey(k))
@@ -95,17 +96,17 @@ Outer:
 			k := newUserSeries(ref.SeriesID, ref.UserID)
 			lbs = &seriesLabels{
 				userSeries: k,
-				lbs:        make(labels.Labels, 0, 15),
+				//lbs:        make(labels.Labels, 0, 15),
 			}
 			sm.mapping[k.Key()] = lbs
 		}
 		// add the labels if it doesn't exist.
-		for _, l := range lbs.lbs {
-			if l.Name == unsafeGetString(ref.Name) {
-				continue Outer
-			}
+		if lbsBuilder.Get(unsafeGetString(ref.Name)) != "" {
+			continue Outer
 		}
-		lbs.lbs = append(lbs.lbs, labels.Label{Name: string(ref.Name), Value: string(v)})
+		lbsBuilder.Set(string(ref.Name), string(v))
+		// TODO: this is not quite right.
+	    lbs.lbs = lbsBuilder.Labels()
 	}
 	return nil
 }

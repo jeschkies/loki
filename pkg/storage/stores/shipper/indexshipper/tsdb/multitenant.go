@@ -34,13 +34,13 @@ func withTenantLabelMatcher(userID string, matchers []*labels.Matcher) []*labels
 }
 
 func withoutTenantLabel(ls labels.Labels) labels.Labels {
-	for i, l := range ls {
+	lsBuilder := labels.NewBuilder(ls)
+	ls.Range(func(l labels.Label) {
 		if l.Name == TenantLabel {
-			ls = append(ls[:i], ls[i+1:]...)
-			break
+			lsBuilder.Del(l.Name)
 		}
-	}
-	return ls
+	})
+	return lsBuilder.Labels()
 }
 
 func (m *MultiTenantIndex) Bounds() (model.Time, model.Time) { return m.idx.Bounds() }

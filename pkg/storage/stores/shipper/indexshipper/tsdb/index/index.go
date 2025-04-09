@@ -416,11 +416,11 @@ func (w *Creator) AddSeries(ref storage.SeriesRef, lset labels.Labels, fp model.
 
 	lastHash := w.lastSeriesHash
 	// Ensure series are sorted by the priorities: [`hash(labels)`, `labels`]
-	if (labelHash < lastHash && len(w.lastSeries) > 0) || labelHash == lastHash && labels.Compare(lset, w.lastSeries) < 0 {
+	if (labelHash < lastHash && w.lastSeries.Len() > 0) || labelHash == lastHash && labels.Compare(lset, w.lastSeries) < 0 {
 		return errors.Errorf("out-of-order series added with label set %q", lset)
 	}
 
-	if ref < w.lastRef && len(w.lastSeries) != 0 {
+	if ref < w.lastRef && w.lastSeries.Len() != 0 {
 		return errors.Errorf("series with reference greater than %d already added", ref)
 	}
 	// We add padding to 16 bytes to increase the addressable space we get through 4 byte
@@ -435,16 +435,22 @@ func (w *Creator) AddSeries(ref storage.SeriesRef, lset labels.Labels, fp model.
 
 	w.buf2.Reset()
 	w.buf2.PutBE64(labelHash)
-	w.buf2.PutUvarint(len(lset))
+	w.buf2.PutUvarint(lset.Len())
 
-	for _, l := range lset {
-		var err error
+	// TODO: patch Prometheus to support Range with break.
+	var err error
+	lset.Range(func(l labels.Label) {
+		if err != nil {
+			return
+		}
+
 		cacheEntry, ok := w.symbolCache[l.Name]
 		nameIndex := cacheEntry.index
 		if !ok {
 			nameIndex, err = w.symbols.ReverseLookup(l.Name)
 			if err != nil {
-				return errors.Errorf("symbol entry for %q does not exist, %v", l.Name, err)
+				err = errors.Errorf("symbol entry for %q does not exist, %v", l.Name, err)
+				return
 			}
 		}
 		w.labelNames[l.Name]++
@@ -454,7 +460,8 @@ func (w *Creator) AddSeries(ref storage.SeriesRef, lset labels.Labels, fp model.
 		if !ok || cacheEntry.lastValue != l.Value {
 			valueIndex, err = w.symbols.ReverseLookup(l.Value)
 			if err != nil {
-				return errors.Errorf("symbol entry for %q does not exist, %v", l.Value, err)
+				err = errors.Errorf("symbol entry for %q does not exist, %v", l.Value, err)
+				return
 			}
 			w.symbolCache[l.Name] = symbolCacheEntry{
 				index:          nameIndex,
@@ -463,7 +470,7 @@ func (w *Creator) AddSeries(ref storage.SeriesRef, lset labels.Labels, fp model.
 			}
 		}
 		w.buf2.PutUvarint32(valueIndex)
-	}
+	})
 
 	w.addChunks(chunks, &w.buf2, &w.buf1, ChunkPageSize)
 
@@ -472,7 +479,8 @@ func (w *Creator) AddSeries(ref storage.SeriesRef, lset labels.Labels, fp model.
 
 	w.buf2.PutHash(w.crc32)
 
-	w.lastSeries = append(w.lastSeries[:0], lset...)
+	// TODO: use scratch builder instead
+	w.lastSeries = lset//append(w.lastSeries[:0], lset...)
 	w.lastSeriesHash = labelHash
 	w.lastRef = ref
 
@@ -2131,7 +2139,8 @@ func buildChunkSamples(d encoding.Decbuf, numChunks int, info *chunkSamples) err
 }
 
 func (dec *Decoder) prepSeries(b []byte, lbls *labels.Labels, chks *[]ChunkMeta) (*encoding.Decbuf, uint64, error) {
-	*lbls = (*lbls)[:0]
+	// TODO: pass in a scratch builder instead
+	lblsBuilder := labels.NewBuilder(labels.EmptyLabels())
 	if chks != nil {
 		*chks = (*chks)[:0]
 	}
@@ -2158,8 +2167,9 @@ func (dec *Decoder) prepSeries(b []byte, lbls *labels.Labels, chks *[]ChunkMeta)
 			return nil, 0, errors.Wrap(err, "lookup label value")
 		}
 
-		*lbls = append(*lbls, labels.Label{Name: ln, Value: lv})
+		lblsBuilder.Set(ln, lv)
 	}
+	*lbls = lblsBuilder.Labels()
 	return &d, fprint, nil
 }
 
@@ -2169,7 +2179,8 @@ func (dec *Decoder) prepSeriesBy(b []byte, lbls *labels.Labels, chks *[]ChunkMet
 	if by == nil {
 		return dec.prepSeries(b, lbls, chks)
 	}
-	*lbls = (*lbls)[:0]
+	// TODO: pass in a scratch builder instead
+	lblsBuilder := labels.NewBuilder(labels.EmptyLabels())
 	if chks != nil {
 		*chks = (*chks)[:0]
 	}
@@ -2200,8 +2211,9 @@ func (dec *Decoder) prepSeriesBy(b []byte, lbls *labels.Labels, chks *[]ChunkMet
 			return nil, 0, errors.Wrap(err, "lookup label value")
 		}
 
-		*lbls = append(*lbls, labels.Label{Name: ln, Value: lv})
+		lblsBuilder.Set(ln, lv)
 	}
+	*lbls = lblsBuilder.Labels()
 	return &d, fprint, nil
 }
 
