@@ -10,6 +10,7 @@ import (
 
 	logger "github.com/go-kit/log"
 	"github.com/grafana/dskit/multierror"
+	"github.com/prometheus/prometheus/model/labels"
 
 	"github.com/grafana/loki/v3/pkg/chunkenc"
 	"github.com/grafana/loki/v3/pkg/compression"
@@ -49,7 +50,7 @@ func TestTokenizerPopulate(t *testing.T) {
 		time.Unix(0, 0), // TODO: Parameterize/better handle the timestamps?
 		time.Unix(0, math.MaxInt64),
 		logproto.FORWARD,
-		log.NewNoopPipeline().ForStream(nil),
+		log.NewNoopPipeline().ForStream(labels.EmptyLabels()),
 	)
 	require.Nil(t, err)
 
@@ -94,7 +95,7 @@ func TestBloomTokenizerPopulateWithoutPreexistingBloom(t *testing.T) {
 		time.Unix(0, 0), // TODO: Parameterize/better handle the timestamps?
 		time.Unix(0, math.MaxInt64),
 		logproto.FORWARD,
-		log.NewNoopPipeline().ForStream(nil),
+		log.NewNoopPipeline().ForStream(labels.EmptyLabels()),
 	)
 	require.Nil(t, err)
 
@@ -136,7 +137,7 @@ func chunkRefItrFromMetadata(metadata ...push.LabelsAdapter) (iter.EntryIterator
 		time.Unix(0, 0), // TODO: Parameterize/better handle the timestamps?
 		time.Unix(0, math.MaxInt64),
 		logproto.FORWARD,
-		log.NewNoopPipeline().ForStream(nil),
+		log.NewNoopPipeline().ForStream(labels.EmptyLabels()),
 	)
 	return itr, err
 }
@@ -219,7 +220,7 @@ func BenchmarkPopulateSeriesWithBloom(b *testing.B) {
 			time.Unix(0, 0), // TODO: Parameterize/better handle the timestamps?
 			time.Unix(0, math.MaxInt64),
 			logproto.FORWARD,
-			log.NewNoopPipeline().ForStream(nil),
+			log.NewNoopPipeline().ForStream(labels.EmptyLabels()),
 		)
 		require.Nil(b, err)
 
