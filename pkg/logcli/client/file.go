@@ -47,12 +47,7 @@ type FileClient struct {
 
 // NewFileClient returns the new instance of FileClient for the given `io.ReadCloser`
 func NewFileClient(r io.ReadCloser) *FileClient {
-	lbs := []labels.Label{
-		{
-			Name:  defaultLabelKey,
-			Value: defaultLabelValue,
-		},
-	}
+	lbs := labels.FromStrings(defaultLabelKey, defaultLabelValue)
 
 	eng := logql.NewEngine(logql.EngineOpts{}, &querier{r: r, labels: lbs}, &limiter{n: defaultMetricSeriesLimit}, log.Logger)
 	return &FileClient{
@@ -289,7 +284,7 @@ func newFileIterator(
 
 	processLine := func(line string) {
 		ts := time.Now()
-		parsedLine, parsedLabels, matches := pipeline.ProcessString(ts.UnixNano(), line)
+		parsedLine, parsedLabels, matches := pipeline.ProcessString(ts.UnixNano(), line, labels.EmptyLabels())
 		if !matches {
 			return
 		}

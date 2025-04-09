@@ -648,6 +648,7 @@ func (d *Distributor) PushWithResolver(ctx context.Context, req *logproto.PushRe
 
 				var normalized string
 				structuredMetadata := logproto.FromLabelAdaptersToLabels(entry.StructuredMetadata)
+				i := 0
 				for i := range entry.StructuredMetadata {
 					normalized = otlptranslate.NormalizeLabel(structuredMetadata[i].Name)
 					if normalized != structuredMetadata[i].Name {

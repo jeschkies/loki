@@ -51,6 +51,7 @@ func ToWriteRequest(lbls []labels.Labels, samples []LegacySample, metadata []*Me
 // Note: while resulting labels.Labels is supposedly sorted, this function
 // doesn't enforce that. If input is not sorted, output will be wrong.
 func FromLabelAdaptersToLabels(ls []LabelAdapter) labels.Labels {
+	// TODO: this breaks for stringlabels
 	return *(*labels.Labels)(unsafe.Pointer(&ls)) // #nosec G103 -- we know the string is not mutated
 }
 
