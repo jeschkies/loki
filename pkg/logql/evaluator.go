@@ -418,7 +418,7 @@ func newVectorAggEvaluator(
 		nextEvaluator: nextEvaluator,
 		expr:          expr,
 		buf:           make([]byte, 0, 1024),
-		lb:            labels.NewBuilder(nil),
+		lb:            labels.NewBuilder(labels.EmptyLabels()),
 	}, nil
 }
 
@@ -462,16 +462,16 @@ func (e *VectorAggEvaluator) Next() (bool, int64, StepResult) {
 				e.lb.Del(labels.MetricName)
 				m = e.lb.Labels()
 			} else {
-				m = make(labels.Labels, 0, len(e.expr.Grouping.Groups))
+				builder := labels.NewScratchBuilder(len(e.expr.Grouping.Groups))
 				for _, l := range metric {
 					for _, n := range e.expr.Grouping.Groups {
 						if l.Name == n {
-							m = append(m, l)
+							builder.Add(l.Name, l.Value)
 							break
 						}
 					}
 				}
-				sort.Sort(m)
+				m = builder.Labels()
 			}
 			result[groupingKey] = &groupedAggregation{
 				labels:     m,
@@ -1097,7 +1097,7 @@ func resultMetric(lhs, rhs labels.Labels, opts *syntax.BinOpOptions) labels.Labe
 		if matching.Card == syntax.CardOneToOne {
 			if matching.On {
 			Outer:
-				for _, l := range lhs {
+				for _, l := range lhs { // TODO: use lhs.Get(n) instead but watch contiune Outer
 					for _, n := range matching.MatchingLabels {
 						if l.Name == n {
 							continue Outer

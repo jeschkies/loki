@@ -100,7 +100,7 @@ func (n noopStreamPipeline) ReferencedStructuredMetadata() bool {
 	return false
 }
 
-func (n noopStreamPipeline) Process(_ int64, line []byte, structuredMetadata ...labels.Label) ([]byte, LabelsResult, bool) {
+func (n noopStreamPipeline) Process(_ int64, line []byte, structuredMetadata labels.Labels) ([]byte, LabelsResult, bool) {
 	n.builder.Reset()
 	for i, lb := range structuredMetadata {
 		structuredMetadata[i].Name = prometheus.NormalizeLabel(lb.Name)
@@ -109,8 +109,8 @@ func (n noopStreamPipeline) Process(_ int64, line []byte, structuredMetadata ...
 	return line, n.builder.LabelsResult(), true
 }
 
-func (n noopStreamPipeline) ProcessString(ts int64, line string, structuredMetadata ...labels.Label) (string, LabelsResult, bool) {
-	_, lr, ok := n.Process(ts, unsafeGetBytes(line), structuredMetadata...)
+func (n noopStreamPipeline) ProcessString(ts int64, line string, structuredMetadata labels.Labels) (string, LabelsResult, bool) {
+	_, lr, ok := n.Process(ts, unsafeGetBytes(line), structuredMetadata)
 	return line, lr, ok
 }
 

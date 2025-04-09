@@ -388,9 +388,9 @@ func AggregatedMetricEntry(
 		push.LabelServiceName, service,
 	)
 
-	for _, l := range lbls {
+	lbls.Range(func(l labels.Label) {
 		base += fmt.Sprintf(" %s=\"%s\"", l.Name, l.Value)
-	}
+	})
 
 	return base
 }

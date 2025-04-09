@@ -75,11 +75,11 @@ func mapAllToLineResult(originLine string, analysisRecords []StageAnalysisRecord
 	return LineResult{originLine, stageRecords}
 }
 
-func mapAllToLabelsResponse(labels labels.Labels) []Label {
-	result := make([]Label, 0, len(labels))
-	for _, label := range labels {
-		result = append(result, Label{Name: label.Name, Value: label.Value})
-	}
+func mapAllToLabelsResponse(lbls labels.Labels) []Label {
+	result := make([]Label, 0, lbls.Len())
+	lbls.Range(func(l labels.Label) {
+		result = append(result, Label{Name: l.Name, Value: l.Value})
+	})
 	return result
 }
 
@@ -118,7 +118,7 @@ func (p streamPipelineAnalyzer) AnalyzeLine(line string) []StageAnalysisRecord {
 		})
 	}
 	stream := log.NewStreamPipeline(stageRecorders, p.origin.LabelsBuilder().ForLabels(p.streamLabels, p.streamLabels.Hash()))
-	_, _, _ = stream.ProcessString(time.Now().UnixMilli(), line)
+	_, _, _ = stream.ProcessString(time.Now().UnixMilli(), line, labels.EmptyLabels())
 	return records
 }
 
@@ -131,7 +131,7 @@ type StageAnalysisRecorder struct {
 
 func (s StageAnalysisRecorder) Process(ts int64, line []byte, lbs *log.LabelsBuilder) ([]byte, bool) {
 	lineBefore := string(line)
-	labelsBefore := lbs.UnsortedLabels(nil)
+	labelsBefore := lbs.UnsortedLabels(labels.EmptyLabels())
 
 	lineResult, ok := s.origin.Process(ts, line, lbs)
 
@@ -139,7 +139,7 @@ func (s StageAnalysisRecorder) Process(ts int64, line []byte, lbs *log.LabelsBui
 		Processed:    true,
 		LabelsBefore: labelsBefore,
 		LineBefore:   lineBefore,
-		LabelsAfter:  lbs.UnsortedLabels(nil),
+		LabelsAfter:  lbs.UnsortedLabels(labels.EmptyLabels()),
 		LineAfter:    string(lineResult),
 		FilteredOut:  !ok,
 	}

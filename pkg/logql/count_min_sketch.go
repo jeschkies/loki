@@ -3,8 +3,6 @@ package logql
 import (
 	"container/heap"
 	"fmt"
-	"slices"
-	"strings"
 
 	"github.com/axiomhq/hyperloglog"
 	"github.com/cespare/xxhash/v2"
@@ -190,7 +188,7 @@ func NewHeapCountMinSketchVector(ts int64, metricsLength, maxLabels int) HeapCou
 }
 
 func (v *HeapCountMinSketchVector) Add(metric labels.Labels, value float64) {
-	slices.SortFunc(metric, func(a, b labels.Label) int { return strings.Compare(a.Name, b.Name) })
+	// TODO: slices.SortFunc(metric, func(a, b labels.Label) int { return strings.Compare(a.Name, b.Name) })
 	v.buffer = metric.Bytes(v.buffer)
 
 	v.F.Add(v.buffer, value)
@@ -270,7 +268,6 @@ func newCountMinSketchVectorAggEvaluator(nextEvaluator StepEvaluator, expr *synt
 		nextEvaluator: nextEvaluator,
 		expr:          expr,
 		buf:           make([]byte, 0, 1024),
-		lb:            labels.NewBuilder(nil),
 		maxLabels:     maxLabels,
 	}, nil
 }
@@ -280,7 +277,6 @@ type countMinSketchVectorAggEvaluator struct {
 	nextEvaluator StepEvaluator
 	expr          *syntax.VectorAggregationExpr
 	buf           []byte
-	lb            *labels.Builder
 	maxLabels     int
 }
 

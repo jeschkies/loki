@@ -118,7 +118,7 @@ func processStream(in []logproto.Stream, pipeline log.Pipeline) []logproto.Strea
 	for _, stream := range in {
 		sp := pipeline.ForStream(mustParseLabels(stream.Labels))
 		for _, e := range stream.Entries {
-			if l, out, matches := sp.Process(e.Timestamp.UnixNano(), []byte(e.Line)); matches {
+			if l, out, matches := sp.Process(e.Timestamp.UnixNano(), []byte(e.Line), labels.EmptyLabels()); matches {
 				var s *logproto.Stream
 				var found bool
 				s, found = resByStream[out.String()]
@@ -147,7 +147,7 @@ func processSeries(in []logproto.Stream, ex []log.SampleExtractor) ([]logproto.S
 		for _, extractor := range ex {
 			exs := extractor.ForStream(mustParseLabels(stream.Labels))
 			for _, e := range stream.Entries {
-				if f, lbs, ok := exs.Process(e.Timestamp.UnixNano(), []byte(e.Line)); ok {
+				if f, lbs, ok := exs.Process(e.Timestamp.UnixNano(), []byte(e.Line), labels.EmptyLabels()); ok {
 					var s *logproto.Series
 					var found bool
 					s, found = resBySeries[lbs.String()]
@@ -266,20 +266,13 @@ func randomStreams(nStreams, nEntries, nShards int, labelNames []string, valueFi
 	for i := 0; i < nStreams; i++ {
 		// labels
 		stream := logproto.Stream{}
-		ls := labels.Labels{{Name: "index", Value: fmt.Sprintf("%d", i)}}
+		ls := labels.NewBuilder(labels.FromStrings("index", fmt.Sprintf("%d", i)))
 
 		for _, lName := range labelNames {
 			// I needed a way to hash something to uint64
 			// in order to get some form of random label distribution
-			shard := append(ls, labels.Label{
-				Name:  lName,
-				Value: fmt.Sprintf("%d", i),
-			}).Hash() % uint64(nShards)
-
-			ls = append(ls, labels.Label{
-				Name:  lName,
-				Value: fmt.Sprintf("%d", shard),
-			})
+			shard := ls.Set(lName, fmt.Sprintf("%d", i)).Labels().Hash() % uint64(nShards)
+			ls.Set(lName, fmt.Sprintf("%d", shard))
 		}
 		for j := 0; j <= nEntries; j++ {
 			line := fmt.Sprintf("stream=stderr level=debug line=%d", j)
@@ -293,8 +286,8 @@ func randomStreams(nStreams, nEntries, nShards int, labelNames []string, valueFi
 			})
 		}
 
-		stream.Labels = ls.String()
-		stream.Hash = ls.Hash()
+		stream.Labels = ls.Labels().String()
+		stream.Hash = ls.Labels().Hash()
 		streams = append(streams, stream)
 	}
 	return streams
