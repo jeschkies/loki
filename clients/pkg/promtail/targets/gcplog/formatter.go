@@ -80,21 +80,21 @@ func parseGCPLogsEntry(data []byte, other model.LabelSet, otherInternal labels.L
 	}
 
 	// final labelset that will be sent to loki
-	labels := make(model.LabelSet)
-	for _, lbl := range processed {
+	lbls := make(model.LabelSet)
+	processed.Range(func (l labels.Label) {
 		// ignore internal labels
-		if strings.HasPrefix(lbl.Name, "__") {
-			continue
+		if strings.HasPrefix(l.Name, "__") {
+			return
 		}
 		// ignore invalid labels
-		if !model.LabelName(lbl.Name).IsValid() || !model.LabelValue(lbl.Value).IsValid() {
-			continue
+		if !model.LabelName(l.Name).IsValid() || !model.LabelValue(l.Value).IsValid() {
+			return
 		}
-		labels[model.LabelName(lbl.Name)] = model.LabelValue(lbl.Value)
-	}
+		lbls[model.LabelName(l.Name)] = model.LabelValue(l.Value)
+	})
 
 	// add labels coming from scrapeconfig
-	labels = labels.Merge(other)
+	lbls = lbls.Merge(other)
 
 	ts := time.Now()
 	line := string(data)
@@ -121,7 +121,7 @@ func parseGCPLogsEntry(data []byte, other model.LabelSet, otherInternal labels.L
 	}
 
 	return api.Entry{
-		Labels: labels,
+		Labels: lbls,
 		Entry: logproto.Entry{
 			Timestamp: ts,
 			Line:      line,

@@ -81,10 +81,7 @@ func (t *Target) run() {
 
 		// TODO: Possibly need to format after merging with discovered labels because we can specify multiple labels in source labels
 		// https://github.com/grafana/loki/pull/4745#discussion_r750022234
-		lbs := format([]labels.Label{{
-			Name:  labelKeyKafkaMessageKey,
-			Value: mk,
-		}}, t.relabelConfig)
+		lbs := format(labels.FromStrings(labelKeyKafkaMessageKey, mk), t.relabelConfig)
 
 		out := t.lbs.Clone()
 		if len(lbs) > 0 {

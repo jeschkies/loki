@@ -106,7 +106,7 @@ func (h *Target) drain(w http.ResponseWriter, r *http.Request) {
 	for herokuScanner.Scan() {
 		ts := time.Now()
 		message := herokuScanner.Message()
-		lb := labels.NewBuilder(nil)
+		lb := labels.NewBuilder(labels.EmptyLabels())
 		lb.Set("__heroku_drain_host", message.Hostname)
 		lb.Set("__heroku_drain_app", message.Application)
 		lb.Set("__heroku_drain_proc", message.Process)
@@ -132,12 +132,12 @@ func (h *Target) drain(w http.ResponseWriter, r *http.Request) {
 
 		// Start with the set of labels fixed in the configuration
 		filtered := h.Labels().Clone()
-		for _, lbl := range processed {
-			if strings.HasPrefix(lbl.Name, "__") {
-				continue
+		processed.Range(func (l labels.Label) {
+			if strings.HasPrefix(l.Name, "__") {
+				return
 			}
-			filtered[model.LabelName(lbl.Name)] = model.LabelValue(lbl.Value)
-		}
+			filtered[model.LabelName(l.Name)] = model.LabelValue(l.Value)
+		})
 
 		// Then, inject it as the reserved label, so it's used by the remote write client
 		if tenantIDHeaderValue != "" {

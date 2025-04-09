@@ -482,12 +482,12 @@ func (h *testServerHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		file := ""
-		for _, label := range parsedLabels {
-			if label.Name == file2.FilenameLabel {
-				file = label.Value
-				continue
+		parsedLabels.Range(func (l labels.Label) {
+			if l.Name == file2.FilenameLabel {
+				file = l.Value
+				return
 			}
-		}
+		})
 		if file == "" {
 			h.t.Error("Expected to find a label with name `filename` but did not!")
 			return

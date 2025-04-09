@@ -53,12 +53,7 @@ func TestClientWriter_LogEntriesAreReconstructedAndForwardedCorrectly(t *testing
 	writeTo.StoreSeries([]record.RefSeries{
 		{
 			Ref: testAppLabelsRef,
-			Labels: []labels.Label{
-				{
-					Name:  "app",
-					Value: "test",
-				},
-			},
+			Labels: labels.FromStrings("app", "test"),
 		},
 	}, 1)
 
@@ -113,12 +108,7 @@ func TestClientWriter_LogEntriesWithoutMatchingSeriesAreIgnored(t *testing.T) {
 	writeTo.StoreSeries([]record.RefSeries{
 		{
 			Ref: testAppLabelsRef,
-			Labels: []labels.Label{
-				{
-					Name:  "app",
-					Value: "test",
-				},
-			},
+			Labels: labels.FromStrings("app", "test"),
 		},
 	}, 1)
 
@@ -194,9 +184,7 @@ func bench(numWriters, totalLines int, b *testing.B) {
 			// and not deleting actually used series
 			startWriter(numWriters+n, n, writeTo, totalLines/numWriters, record.RefSeries{
 				Ref: chunks.HeadSeriesRef(n),
-				Labels: labels.Labels{
-					{Name: "n", Value: fmt.Sprint(n)},
-				},
+				Labels: labels.FromStrings("n", fmt.Sprint(n)),
 			}, time.Millisecond*500)
 		}(n)
 	}

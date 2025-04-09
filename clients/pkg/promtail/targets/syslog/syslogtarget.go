@@ -152,12 +152,12 @@ func (t *SyslogTarget) handleMessageRFC5424(connLabels labels.Labels, msg syslog
 	processed, _ := relabel.Process(lb.Labels(), t.relabelConfig...)
 
 	filtered := make(model.LabelSet)
-	for _, lbl := range processed {
-		if strings.HasPrefix(lbl.Name, "__") {
-			continue
+	processed.Range(func (l labels.Label) {
+		if strings.HasPrefix(l.Name, "__") {
+			return
 		}
-		filtered[model.LabelName(lbl.Name)] = model.LabelValue(lbl.Value)
-	}
+		filtered[model.LabelName(l.Name)] = model.LabelValue(l.Value)
+	})
 
 	var timestamp time.Time
 	if t.config.UseIncomingTimestamp && rfc5424Msg.Timestamp != nil {
@@ -209,12 +209,12 @@ func (t *SyslogTarget) handleMessageRFC3164(connLabels labels.Labels, msg syslog
 	processed, _ := relabel.Process(lb.Labels(), t.relabelConfig...)
 
 	filtered := make(model.LabelSet)
-	for _, lbl := range processed {
-		if strings.HasPrefix(lbl.Name, "__") {
-			continue
+	processed.Range(func (l labels.Label) {
+		if strings.HasPrefix(l.Name, "__") {
+			return
 		}
-		filtered[model.LabelName(lbl.Name)] = model.LabelValue(lbl.Value)
-	}
+		filtered[model.LabelName(l.Name)] = model.LabelValue(l.Value)
+	})
 
 	var timestamp time.Time
 	if t.config.UseIncomingTimestamp && rfc3164Msg.Timestamp != nil {

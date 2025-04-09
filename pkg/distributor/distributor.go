@@ -1088,12 +1088,12 @@ func labelTemplate(lbls string, logger log.Logger) labels.Labels {
 
 func (d *Distributor) createShard(lbls labels.Labels, streamPattern string, shardNumber, numOfEntries int) logproto.Stream {
 	shardLabel := strconv.Itoa(shardNumber)
-	for i := 0; i < len(lbls); i++ {
-		if lbls[i].Name == ingester.ShardLbName {
-			lbls[i].Value = shardLabel
-			break
+	lbls.Range(func (l labels.Label) {
+		if l.Name == ingester.ShardLbName {
+			l.Value = shardLabel
+			return
 		}
-	}
+	})
 
 	return logproto.Stream{
 		Labels:  strings.Replace(streamPattern, ingester.ShardLbPlaceholder, shardLabel, 1),
