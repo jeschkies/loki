@@ -205,16 +205,10 @@ func Test_seriesLimiter(t *testing.T) {
 						F: 0.013333333333333334,
 					},
 				},
-				Metric: []labels.Label{
-					{
-						Name:  "filename",
-						Value: `/var/hostlog/apport.log`,
-					},
-					{
-						Name:  "job",
-						Value: "anotherjob",
-					},
-				},
+				Metric: labels.FromStrings(
+					"filename", `/var/hostlog/apport.log`,
+					"job", "anotherjob",
+				),
 			},
 		}
 		params, err := ParamsFromRequest(req)

@@ -242,11 +242,11 @@ func TestMergedViewMaterialize(t *testing.T) {
 	require.Len(t, mat.Data, 3)
 	series := make([]string, 0)
 	for _, d := range mat.Data {
-		l := make([]labels.Label, 0, len(d.Labels))
+		l := labels.NewBuilder(labels.EmptyLabels())
 		for _, p := range d.Labels {
-			l = append(l, labels.Label{Name: p.Key, Value: p.Value})
+			l.Set(p.Key, p.Value)
 		}
-		series = append(series, labels.Labels(l).String())
+		series = append(series, l.Labels().String())
 	}
 	expected := []string{`{i="1", baz="woof"}`, `{i="3", baz="woof"}`, `{i="2", foo="bar"}`}
 	require.ElementsMatch(t, series, expected)
