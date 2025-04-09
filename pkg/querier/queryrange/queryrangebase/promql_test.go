@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -573,12 +572,12 @@ func Test_FunctionParallelism(t *testing.T) {
 var shardAwareQueryable = storage.QueryableFunc(func(_, _ int64) (storage.Querier, error) {
 	return &testMatrix{
 		series: []*promql.StorageSeries{
-			newSeries(labels.Labels{{Name: "__name__", Value: "bar1"}, {Name: "baz", Value: "blip"}, {Name: "bar", Value: "blop"}, {Name: "foo", Value: "barr"}}, factor(5)),
-			newSeries(labels.Labels{{Name: "__name__", Value: "bar1"}, {Name: "baz", Value: "blip"}, {Name: "bar", Value: "blop"}, {Name: "foo", Value: "bazz"}}, factor(7)),
-			newSeries(labels.Labels{{Name: "__name__", Value: "bar1"}, {Name: "baz", Value: "blip"}, {Name: "bar", Value: "blap"}, {Name: "foo", Value: "buzz"}}, factor(12)),
-			newSeries(labels.Labels{{Name: "__name__", Value: "bar1"}, {Name: "baz", Value: "blip"}, {Name: "bar", Value: "blap"}, {Name: "foo", Value: "bozz"}}, factor(11)),
-			newSeries(labels.Labels{{Name: "__name__", Value: "bar1"}, {Name: "baz", Value: "blip"}, {Name: "bar", Value: "blop"}, {Name: "foo", Value: "buzz"}}, factor(8)),
-			newSeries(labels.Labels{{Name: "__name__", Value: "bar1"}, {Name: "baz", Value: "blip"}, {Name: "bar", Value: "blap"}, {Name: "foo", Value: "bazz"}}, identity),
+			newSeries(labels.FromStrings("__name__", "bar1", "baz", "blip", "bar", "blop", "foo", "barr"), factor(5)),
+			newSeries(labels.FromStrings("__name__", "bar1", "baz", "blip", "bar", "blop", "foo", "bazz"), factor(7)),
+			newSeries(labels.FromStrings("__name__", "bar1", "baz", "blip", "bar", "blap", "foo", "buzz"), factor(12)),
+			newSeries(labels.FromStrings("__name__", "bar1", "baz", "blip", "bar", "blap", "foo", "bozz"), factor(11)),
+			newSeries(labels.FromStrings("__name__", "bar1", "baz", "blip", "bar", "blop", "foo", "buzz"), factor(8)),
+			newSeries(labels.FromStrings("__name__", "bar1", "baz", "blip", "bar", "blap", "foo", "bazz"), identity),
 		},
 	}, nil
 })
@@ -626,7 +625,7 @@ func (m *testMatrix) LabelNames(_ context.Context, _ *storage.LabelHints, _ ...*
 func (m *testMatrix) Close() error { return nil }
 
 func newSeries(metric labels.Labels, generator func(float64) float64) *promql.StorageSeries {
-	sort.Sort(metric)
+	//sort.Sort(metric)
 	var points []promql.FPoint
 
 	for ts := start.Add(-step); ts.Unix() <= end.Unix(); ts = ts.Add(step) {
@@ -680,11 +679,10 @@ func splitByShard(shardIndex, shardTotal int, testMatrices *testMatrix) *testMat
 			})
 
 		}
-		lbs := s.Labels().Copy()
-		lbs = append(lbs, labels.Label{Name: "__cortex_shard__", Value: fmt.Sprintf("%d_of_%d", shardIndex, shardTotal)})
-		sort.Sort(lbs)
+		lbs := labels.NewBuilder(s.Labels())
+		lbs.Set("__cortex_shard__", fmt.Sprintf("%d_of_%d", shardIndex, shardTotal))
 		res.series = append(res.series, promql.NewStorageSeries(promql.Series{
-			Metric: lbs,
+			Metric: lbs.Labels(),
 			Floats: points,
 		}))
 	}
