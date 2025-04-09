@@ -76,7 +76,7 @@ func TestLabelsBuilder_LabelsErrorFromAdd(t *testing.T) {
 	b.Reset()
 
 	// This works for any category
-	b.Add(StructuredMetadataLabel, labels.FromStrings(logqlmodel.ErrorLabel, "test error", logqlmodel.ErrorDetailsLabel, "test details")...)
+	b.Add(StructuredMetadataLabel, labels.FromStrings(logqlmodel.ErrorLabel, "test error", logqlmodel.ErrorDetailsLabel, "test details"))
 	lbsWithErr := b.LabelsResult()
 
 	expectedLbs := labels.FromStrings(
@@ -186,7 +186,7 @@ func TestLabelsBuilder_LabelsResult(t *testing.T) {
 		"buzz", "fuzz",
 		"ToReplace", "other",
 	)
-	expected := make(labels.Labels, 0, len(expectedStreamLbls)+len(expectedStucturedMetadataLbls)+len(expectedParsedLbls))
+	expected := make([]labels.Label, 0, expectedStreamLbls.Len()+len(expectedStucturedMetadataLbls)+len(expectedParsedLbls))
 	expected = append(expected, expectedStreamLbls...)
 	expected = append(expected, expectedStucturedMetadataLbls...)
 	expected = append(expected, expectedParsedLbls...)
