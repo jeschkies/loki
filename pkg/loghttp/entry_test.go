@@ -34,10 +34,7 @@ func TestEntryMarshalUnmarshalJSON(t *testing.T) {
 			entry: Entry{
 				Timestamp: time.Unix(0, 123456789012345),
 				Line:      "test line",
-				StructuredMetadata: labels.Labels{
-					{Name: "foo", Value: "bar"},
-					{Name: "count", Value: "42"},
-				},
+				StructuredMetadata: labels.FromStrings("foo", "bar", "count", "42"),
 			},
 			expected: `["123456789012345","test line",{"count":"42","foo":"bar"}]`,
 		},
@@ -46,9 +43,7 @@ func TestEntryMarshalUnmarshalJSON(t *testing.T) {
 			entry: Entry{
 				Timestamp: time.Unix(0, 123456789012345),
 				Line:      "test line",
-				StructuredMetadata: labels.Labels{
-					{Name: "message", Value: "a\nb\nc"},
-				},
+				StructuredMetadata: labels.FromStrings("message", "a\nb\nc"),
 			},
 			expected: `["123456789012345","test line",{"message":"a\nb\nc"}]`,
 		},
@@ -57,9 +52,7 @@ func TestEntryMarshalUnmarshalJSON(t *testing.T) {
 			entry: Entry{
 				Timestamp: time.Unix(0, 123456789012345),
 				Line:      "test line",
-				StructuredMetadata: labels.Labels{
-					{Name: "message", Value: `"test"`},
-				},
+				StructuredMetadata: labels.FromStrings("message", `"test"`),
 			},
 			expected: `["123456789012345","test line",{"message":"\"test\""}]`,
 		},
@@ -92,9 +85,7 @@ func TestEntryRoundTripWithNewlines(t *testing.T) {
 	original := Entry{
 		Timestamp: time.Unix(0, 123456789012345),
 		Line:      "test line",
-		StructuredMetadata: labels.Labels{
-			{Name: "message", Value: "a\nb\nc"},
-		},
+		StructuredMetadata: labels.FromStrings("message", "a\nb\nc"),
 	}
 
 	// First marshal to JSON
@@ -114,7 +105,7 @@ func TestEntryRoundTripWithNewlines(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify the structured metadata value still has actual newlines
-	require.Equal(t, "a\nb\nc", decoded.StructuredMetadata[0].Value)
+	require.Equal(t, "a\nb\nc", decoded.StructuredMetadata.Get("message"))
 }
 
 func TestEntryJsoniterEncoding(t *testing.T) {
@@ -122,9 +113,7 @@ func TestEntryJsoniterEncoding(t *testing.T) {
 	entry := Entry{
 		Timestamp: time.Unix(0, 123456789012345),
 		Line:      "test line",
-		StructuredMetadata: labels.Labels{
-			{Name: "message", Value: "a\nb\nc"},
-		},
+		StructuredMetadata: labels.FromStrings("message", "a\nb\nc"),
 	}
 
 	// Use the custom jsoniter instance that has our extension registered
@@ -147,7 +136,7 @@ func TestEntryJsoniterEncoding(t *testing.T) {
 	// Verify the values match, especially the newlines in structured metadata
 	require.Equal(t, entry.Timestamp, decoded.Timestamp)
 	require.Equal(t, entry.Line, decoded.Line)
-	require.Equal(t, "a\nb\nc", decoded.StructuredMetadata[0].Value)
+	require.Equal(t, "a\nb\nc", decoded.StructuredMetadata.Get("message"))
 }
 
 func TestEntryEncoderSpecifically(t *testing.T) {
@@ -155,9 +144,7 @@ func TestEntryEncoderSpecifically(t *testing.T) {
 	entry := Entry{
 		Timestamp: time.Unix(0, 123456789012345),
 		Line:      "test line",
-		StructuredMetadata: labels.Labels{
-			{Name: "message", Value: "a\nb\nc"},
-		},
+		StructuredMetadata: labels.FromStrings("message", "a\nb\nc"),
 	}
 
 	// Create a jsoniter stream
@@ -200,11 +187,11 @@ func TestUnmarshalEscapingIssue(t *testing.T) {
 	require.NoError(t, err)
 
 	// Print the actual value of StructuredMetadata for debugging
-	t.Logf("Structured metadata value after unmarshal: %#v", entry.StructuredMetadata[0].Value)
+	t.Logf("Structured metadata value after unmarshal: %#v", entry.StructuredMetadata.Get("message"))
 
 	// Verify the value still has actual newlines - this is the core issue
 	// We expect "a\nb\nc" when printed to log but in memory it should be a real newline
-	actualValue := entry.StructuredMetadata[0].Value
+	actualValue := entry.StructuredMetadata.Get("message")
 	require.Equal(t, "a\nb\nc", actualValue, "Newlines should be properly preserved")
 
 	// Also directly check the byte representation of the string to see what's happening
@@ -224,7 +211,7 @@ func TestUnmarshalEscapingIssue(t *testing.T) {
 	require.NoError(t, err)
 
 	// Check the value after double marshaling/unmarshaling
-	t.Logf("Value after second unmarshal: %#v", reUnmarshaled.StructuredMetadata[0].Value)
+	t.Logf("Value after second unmarshal: %#v", reUnmarshaled.StructuredMetadata.Get("message"))
 }
 
 func TestParseStringWithNewlines(t *testing.T) {
