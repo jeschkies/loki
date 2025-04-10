@@ -66,9 +66,7 @@ func TestMetricQueryCacheKey(t *testing.T) {
 		ingesterQueryWindow = defaultSplit * 3
 	)
 
-	var (
-		step = (15 * time.Second).Milliseconds()
-	)
+	step := (15 * time.Second).Milliseconds()
 
 	l := fakeLimits{
 		splitDuration:         map[string]time.Duration{defaultTenant: defaultSplit, alternateTenant: defaultSplit},
@@ -749,7 +747,6 @@ func Test_WeightedParallelism(t *testing.T) {
 			})
 		}
 	}
-
 }
 
 func Test_WeightedParallelism_DivideByZeroError(t *testing.T) {
@@ -965,7 +962,6 @@ func Test_MaxQuerySize(t *testing.T) {
 			require.Equal(t, tc.expectedQuerierStatsHits, *querierStatsHits)
 		})
 	}
-
 }
 
 func Test_MaxQuerySize_MaxLookBackPeriod(t *testing.T) {

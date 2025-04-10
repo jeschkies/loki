@@ -39,7 +39,7 @@ var (
 func Test_PromQL(t *testing.T) {
 	t.Parallel()
 
-	var tests = []struct {
+	tests := []struct {
 		normalQuery string
 		shardQuery  string
 		shouldEqual bool
@@ -321,7 +321,6 @@ func Test_PromQL(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.normalQuery, func(t *testing.T) {
-
 			baseQuery, err := engine.NewRangeQuery(context.Background(), shardAwareQueryable, nil, tt.normalQuery, start, end, step)
 			require.Nil(t, err)
 			shardQuery, err := engine.NewRangeQuery(context.Background(), shardAwareQueryable, nil, tt.shardQuery, start, end, step)
@@ -337,7 +336,6 @@ func Test_PromQL(t *testing.T) {
 			require.NotEqual(t, baseResult, shardResult)
 		})
 	}
-
 }
 
 func Test_FunctionParallelism(t *testing.T) {
@@ -519,7 +517,6 @@ func Test_FunctionParallelism(t *testing.T) {
 			fArgs: []string{"20"},
 		},
 	} {
-
 		t.Run(tc.fn, func(t *testing.T) {
 			baseQuery, err := engine.NewRangeQuery(
 				context.Background(),
@@ -566,7 +563,6 @@ func Test_FunctionParallelism(t *testing.T) {
 			}
 		})
 	}
-
 }
 
 var shardAwareQueryable = storage.QueryableFunc(func(_, _ int64) (storage.Querier, error) {
@@ -619,13 +615,13 @@ func (m *testMatrix) Select(_ context.Context, _ bool, _ *storage.SelectHints, m
 func (m *testMatrix) LabelValues(_ context.Context, _ string, _ *storage.LabelHints, _ ...*labels.Matcher) ([]string, annotations.Annotations, error) {
 	return nil, nil, nil
 }
+
 func (m *testMatrix) LabelNames(_ context.Context, _ *storage.LabelHints, _ ...*labels.Matcher) ([]string, annotations.Annotations, error) {
 	return nil, nil, nil
 }
 func (m *testMatrix) Close() error { return nil }
 
 func newSeries(metric labels.Labels, generator func(float64) float64) *promql.StorageSeries {
-	//sort.Sort(metric)
 	var points []promql.FPoint
 
 	for ts := start.Add(-step); ts.Unix() <= end.Unix(); ts = ts.Add(step) {

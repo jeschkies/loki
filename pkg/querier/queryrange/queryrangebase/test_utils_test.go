@@ -19,7 +19,7 @@ func TestGenLabelsCorrectness(t *testing.T) {
 			"b", "0",
 		),
 		labels.FromStrings(
-			"a", "0", 
+			"a", "0",
 			"b", "1",
 		),
 		labels.FromStrings(
