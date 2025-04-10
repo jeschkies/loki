@@ -119,7 +119,7 @@ func (m mockIndex) Series(ref storage.SeriesRef, lset *labels.Labels, chks *[]Ch
 		return errors.New("not found")
 	}
 	// TODO: make more efficient
-	*lset = s.l.Copy()//append((*lset)[:0], s.l...)
+	*lset = s.l.Copy() //append((*lset)[:0], s.l...)
 	*chks = append((*chks)[:0], s.chunks...)
 
 	return nil

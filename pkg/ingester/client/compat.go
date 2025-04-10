@@ -39,7 +39,7 @@ func FastFingerprint(ls []logproto.LabelAdapter) model.Fingerprint {
 // Fingerprint runs the same algorithm as Prometheus labelSetToFingerprint()
 func Fingerprint(lbls labels.Labels) model.Fingerprint {
 	sum := hashNew()
-	lbls.Range(func (l labels.Label) {
+	lbls.Range(func(l labels.Label) {
 		sum = hashAddString(sum, l.Name)
 		sum = hashAddByte(sum, model.SeparatorByte)
 		sum = hashAddString(sum, l.Value)

@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"runtime/pprof"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -1089,7 +1088,7 @@ func labelTemplate(lbls string, logger log.Logger) labels.Labels {
 
 func (d *Distributor) createShard(lbls labels.Labels, streamPattern string, shardNumber, numOfEntries int) logproto.Stream {
 	shardLabel := strconv.Itoa(shardNumber)
-	lbls.Range(func (l labels.Label) {
+	lbls.Range(func(l labels.Label) {
 		if l.Name == ingester.ShardLbName {
 			l.Value = shardLabel
 			return

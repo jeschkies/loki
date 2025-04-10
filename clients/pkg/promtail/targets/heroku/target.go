@@ -132,7 +132,7 @@ func (h *Target) drain(w http.ResponseWriter, r *http.Request) {
 
 		// Start with the set of labels fixed in the configuration
 		filtered := h.Labels().Clone()
-		processed.Range(func (l labels.Label) {
+		processed.Range(func(l labels.Label) {
 			if strings.HasPrefix(l.Name, "__") {
 				return
 			}

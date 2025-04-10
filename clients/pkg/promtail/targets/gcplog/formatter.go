@@ -81,7 +81,7 @@ func parseGCPLogsEntry(data []byte, other model.LabelSet, otherInternal labels.L
 
 	// final labelset that will be sent to loki
 	lbls := make(model.LabelSet)
-	processed.Range(func (l labels.Label) {
+	processed.Range(func(l labels.Label) {
 		// ignore internal labels
 		if strings.HasPrefix(l.Name, "__") {
 			return

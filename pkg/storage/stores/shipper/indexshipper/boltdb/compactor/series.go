@@ -106,7 +106,7 @@ Outer:
 		}
 		lbsBuilder.Set(string(ref.Name), string(v))
 		// TODO: this is not quite right.
-	    lbs.lbs = lbsBuilder.Labels()
+		lbs.lbs = lbsBuilder.Labels()
 	}
 	return nil
 }

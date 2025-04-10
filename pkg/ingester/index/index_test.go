@@ -99,7 +99,7 @@ func TestDeleteAddLoopkup(t *testing.T) {
 func Test_hash_mapping(t *testing.T) {
 	lbs := labels.FromStrings(
 		"compose_project", "loki-tsdb-storage-s3",
-		"compose_service", "ingester-2", 
+		"compose_service", "ingester-2",
 		"container_name", "loki-tsdb-storage-s3_ingester-2_1",
 		"filename", "/var/log/docker/790fef4c6a587c3b386fe85c07e03f3a1613f4929ca3abaa4880e14caadb5ad1/json.log",
 		"host", "docker-desktop",

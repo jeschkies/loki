@@ -142,7 +142,7 @@ func Test_Retention(t *testing.T) {
 			},
 			[]chunk.Chunk{
 				createChunk(t, "1", labels.FromStrings("foo", "bar"), start, start.Add(1*time.Hour)),
-				createChunk(t, "2", labels.FromStrings("foo", "fuzz"), start.Add(26*time.Hour), start.Add(27*time.Hour)), 
+				createChunk(t, "2", labels.FromStrings("foo", "fuzz"), start.Add(26*time.Hour), start.Add(27*time.Hour)),
 				createChunk(t, "1", labels.FromStrings("foo", "buzz"), model.Now().Add(-2*time.Hour), model.Now().Add(-1*time.Hour)),
 				createChunk(t, "1", labels.FromStrings("foo", "buzz"), model.Now().Add(-7*time.Hour), model.Now().Add(-6*time.Hour)),
 			},

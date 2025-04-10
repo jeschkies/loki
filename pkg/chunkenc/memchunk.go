@@ -1647,7 +1647,7 @@ func (si *bufferedIterator) close() {
 
 	if !si.currStructuredMetadata.IsEmpty() {
 		structuredMetadataPool.Put(si.currStructuredMetadata) // nolint:staticcheck
-		si.currStructuredMetadata = labels.EmptyLabels() // TODO: maybe a reset would be better
+		si.currStructuredMetadata = labels.EmptyLabels()      // TODO: maybe a reset would be better
 	}
 
 	si.origBytes = nil

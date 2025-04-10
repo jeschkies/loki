@@ -32,8 +32,8 @@ func TestEntryMarshalUnmarshalJSON(t *testing.T) {
 		{
 			name: "entry with structured metadata",
 			entry: Entry{
-				Timestamp: time.Unix(0, 123456789012345),
-				Line:      "test line",
+				Timestamp:          time.Unix(0, 123456789012345),
+				Line:               "test line",
 				StructuredMetadata: labels.FromStrings("foo", "bar", "count", "42"),
 			},
 			expected: `["123456789012345","test line",{"count":"42","foo":"bar"}]`,
@@ -41,8 +41,8 @@ func TestEntryMarshalUnmarshalJSON(t *testing.T) {
 		{
 			name: "entry with newlines in structured metadata",
 			entry: Entry{
-				Timestamp: time.Unix(0, 123456789012345),
-				Line:      "test line",
+				Timestamp:          time.Unix(0, 123456789012345),
+				Line:               "test line",
 				StructuredMetadata: labels.FromStrings("message", "a\nb\nc"),
 			},
 			expected: `["123456789012345","test line",{"message":"a\nb\nc"}]`,
@@ -50,8 +50,8 @@ func TestEntryMarshalUnmarshalJSON(t *testing.T) {
 		{
 			name: "entry with quotes in structured metadata",
 			entry: Entry{
-				Timestamp: time.Unix(0, 123456789012345),
-				Line:      "test line",
+				Timestamp:          time.Unix(0, 123456789012345),
+				Line:               "test line",
 				StructuredMetadata: labels.FromStrings("message", `"test"`),
 			},
 			expected: `["123456789012345","test line",{"message":"\"test\""}]`,
@@ -83,8 +83,8 @@ func TestEntryMarshalUnmarshalJSON(t *testing.T) {
 func TestEntryRoundTripWithNewlines(t *testing.T) {
 	// This test specifically checks if newlines in structured metadata are preserved correctly
 	original := Entry{
-		Timestamp: time.Unix(0, 123456789012345),
-		Line:      "test line",
+		Timestamp:          time.Unix(0, 123456789012345),
+		Line:               "test line",
 		StructuredMetadata: labels.FromStrings("message", "a\nb\nc"),
 	}
 
@@ -111,8 +111,8 @@ func TestEntryRoundTripWithNewlines(t *testing.T) {
 func TestEntryJsoniterEncoding(t *testing.T) {
 	// This test specifically checks if newlines in structured metadata are properly encoded using jsoniter
 	entry := Entry{
-		Timestamp: time.Unix(0, 123456789012345),
-		Line:      "test line",
+		Timestamp:          time.Unix(0, 123456789012345),
+		Line:               "test line",
 		StructuredMetadata: labels.FromStrings("message", "a\nb\nc"),
 	}
 
@@ -142,8 +142,8 @@ func TestEntryJsoniterEncoding(t *testing.T) {
 func TestEntryEncoderSpecifically(t *testing.T) {
 	// Test the specific EntryEncoder.Encode method directly
 	entry := Entry{
-		Timestamp: time.Unix(0, 123456789012345),
-		Line:      "test line",
+		Timestamp:          time.Unix(0, 123456789012345),
+		Line:               "test line",
 		StructuredMetadata: labels.FromStrings("message", "a\nb\nc"),
 	}
 

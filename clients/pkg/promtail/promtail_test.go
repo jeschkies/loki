@@ -482,7 +482,7 @@ func (h *testServerHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		file := ""
-		parsedLabels.Range(func (l labels.Label) {
+		parsedLabels.Range(func(l labels.Label) {
 			if l.Name == file2.FilenameLabel {
 				file = l.Value
 				return

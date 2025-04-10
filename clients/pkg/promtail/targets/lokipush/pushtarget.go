@@ -145,7 +145,7 @@ func (t *PushTarget) handleLoki(w http.ResponseWriter, r *http.Request) {
 
 		// Convert to model.LabelSet
 		filtered := model.LabelSet{}
-		processed.Range(func (l labels.Label) {
+		processed.Range(func(l labels.Label) {
 			if strings.HasPrefix(l.Name, "__") {
 				return
 			}

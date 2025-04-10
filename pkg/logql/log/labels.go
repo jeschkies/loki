@@ -397,8 +397,8 @@ func (b *LabelsBuilder) Add(category LabelCategory, lbls labels.Labels) *LabelsB
 	lbls.Range(func(l labels.Label) {
 		name := l.Name
 		if b.BaseHas(name) {
-		name = fmt.Sprintf("%s%s", name, duplicateSuffix)
-	}
+			name = fmt.Sprintf("%s%s", name, duplicateSuffix)
+		}
 
 		if name == logqlmodel.ErrorLabel {
 			b.err = l.Value

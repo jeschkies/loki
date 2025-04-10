@@ -209,7 +209,7 @@ func (e *messageParser) getLabels(logRecord *azureMonitorResourceLog, relabelCon
 
 	// final labelset that will be sent to loki
 	resultLabels := make(model.LabelSet)
-	processed.Range(func (l labels.Label) {
+	processed.Range(func(l labels.Label) {
 		// ignore internal labels
 		if strings.HasPrefix(l.Name, "__") {
 			return

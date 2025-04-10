@@ -480,7 +480,7 @@ func (w *Creator) AddSeries(ref storage.SeriesRef, lset labels.Labels, fp model.
 	w.buf2.PutHash(w.crc32)
 
 	// TODO: use scratch builder instead
-	w.lastSeries = lset//append(w.lastSeries[:0], lset...)
+	w.lastSeries = lset //append(w.lastSeries[:0], lset...)
 	w.lastSeriesHash = labelHash
 	w.lastRef = ref
 

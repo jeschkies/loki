@@ -247,7 +247,7 @@ func (t *Target) handleOutput(logStream string, ts time.Time, payload string) {
 	processed, _ := relabel.Process(lb.Labels(), t.relabelConfig...)
 
 	filtered := make(model.LabelSet)
-	processed.Range(func (l labels.Label) {
+	processed.Range(func(l labels.Label) {
 		if strings.HasPrefix(l.Name, "__") {
 			return
 		}

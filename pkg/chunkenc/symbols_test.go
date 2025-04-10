@@ -66,7 +66,7 @@ func TestSymbolizer(t *testing.T) {
 				),
 				labels.FromStrings(
 					"foo", "bar",
-					"fizz", "buzz", 
+					"fizz", "buzz",
 					"ping", "pong",
 				),
 			},

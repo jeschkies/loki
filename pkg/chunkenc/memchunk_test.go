@@ -1382,7 +1382,7 @@ func BenchmarkBufferedIteratorLabels(b *testing.B) {
 			labelsSet := []labels.Labels{
 				labels.FromStrings(
 					"cluster", "us-central1",
-					"stream", "stdout", 
+					"stream", "stdout",
 					"filename", "/var/log/pods/loki-prod_query-frontend-6894f97b98-89q2n_eac98024-f60f-44af-a46f-d099bc99d1e7/query-frontend/0.log",
 					"namespace", "loki-dev",
 					"job", "loki-prod/query-frontend",
@@ -1393,7 +1393,7 @@ func BenchmarkBufferedIteratorLabels(b *testing.B) {
 					"cluster", "us-central2",
 					"stream", "stderr",
 					"filename", "/var/log/pods/loki-prod_querier-6894f97b98-89q2n_eac98024-f60f-44af-a46f-d099bc99d1e7/query-frontend/0.log",
-					"namespace", "loki-dev", 
+					"namespace", "loki-dev",
 					"job", "loki-prod/querier",
 					"container", "querier",
 					"pod", "querier-6894f97b98-89q2n",

@@ -119,7 +119,7 @@ func (h *headIndexReader) Series(ref storage.SeriesRef, from int64, through int6
 	}
 	// TODO: verify this works for slicelabels and stringlabels
 	// Maybe inject a labels.Builder instead
-	*lbls = s.ls//append((*lbls)[:0], s.ls...)
+	*lbls = s.ls //append((*lbls)[:0], s.ls...)
 
 	queryBounds := newBounds(model.Time(from), model.Time(through))
 
@@ -144,7 +144,7 @@ func (h *headIndexReader) ChunkStats(ref storage.SeriesRef, from, through int64,
 		return 0, index.ChunkStats{}, storage.ErrNotFound
 	}
 	if len(by) == 0 {
-		*lbls = s.ls//append((*lbls)[:0], s.ls...)
+		*lbls = s.ls //append((*lbls)[:0], s.ls...)
 	} else {
 		// TODO: creating a new builder every time is not efficient
 		lblsBuilder := labels.NewBuilder(labels.EmptyLabels())
