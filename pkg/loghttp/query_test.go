@@ -171,8 +171,8 @@ func TestStreams_ToProto(t *testing.T) {
 					Entries: []logproto.Entry{
 						{Timestamp: time.Unix(0, 1), Line: "1"},
 						{Timestamp: time.Unix(0, 2), Line: "2", StructuredMetadata: []logproto.LabelAdapter{
-							{Name: "foo", Value: "a"},
 							{Name: "bar", Value: "b"},
+							{Name: "foo", Value: "a"},
 						}},
 					},
 				},
@@ -181,8 +181,8 @@ func TestStreams_ToProto(t *testing.T) {
 					Entries: []logproto.Entry{
 						{Timestamp: time.Unix(0, 3), Line: "3"},
 						{Timestamp: time.Unix(0, 4), Line: "4", StructuredMetadata: []logproto.LabelAdapter{
-							{Name: "foo", Value: "a"},
 							{Name: "bar", Value: "b"},
+							{Name: "foo", Value: "a"},
 						}},
 					},
 				},
