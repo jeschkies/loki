@@ -260,7 +260,7 @@ func (hb *unorderedHeadBlock) Iterator(ctx context.Context, direction logproto.D
 		mint,
 		maxt,
 		func(statsCtx *stats.Context, ts int64, line string, structuredMetadataSymbols symbols) error {
-			structuredMetadata = hb.symbolizer.Lookup(structuredMetadataSymbols, labelsBuilder)
+			structuredMetadata = hb.symbolizer.Lookup(structuredMetadataSymbols, structuredMetadata)
 			newLine, parsedLbs, matches := pipeline.ProcessString(ts, line, structuredMetadata)
 			if !matches {
 				return nil
