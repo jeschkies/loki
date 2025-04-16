@@ -403,8 +403,8 @@ func (shard *indexShard) delete(lbls labels.Labels, fp model.Fingerprint) {
 	shard.mtx.Lock()
 	defer shard.mtx.Unlock()
 
-	lbls.Range(func(l labels.Label) {
-		name, value := l.Name, l.Value
+	lbls.Range(func(pair labels.Label) {
+		name, value := pair.Name, pair.Value
 		values, ok := shard.idx[name]
 		if !ok {
 			return
