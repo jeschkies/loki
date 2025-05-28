@@ -437,14 +437,6 @@ func (b *LabelsBuilder) GetJSONPath(labelName string) []string {
 	return path
 }
 
-// Labels returns the labels from the builder. If no modifications
-// were made, the original labels are returned.
-func (b *LabelsBuilder) labels(categories ...LabelCategory) labels.Labels {
-	b.buf = b.UnsortedLabels(b.buf, categories...)
-	sort.Sort(b.buf)
-	return b.buf
-}
-
 func (b *LabelsBuilder) appendErrors(buf labels.Labels) labels.Labels {
 	if b.err != "" {
 		buf = append(buf, labels.Label{
