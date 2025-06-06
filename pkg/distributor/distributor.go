@@ -645,17 +645,17 @@ func (d *Distributor) PushWithResolver(ctx context.Context, req *logproto.PushRe
 
 				var normalized string
 				structuredMetadata := logproto.FromLabelAdaptersToLabels(entry.StructuredMetadata)
-				for i := range entry.StructuredMetadata {
-					normalized = otlptranslate.NormalizeLabel(structuredMetadata[i].Name)
-					if normalized != structuredMetadata[i].Name {
-						structuredMetadata[i].Name = normalized
+				structuredMetadata.Range(func(label labels.Label) {
+					normalized = otlptranslate.NormalizeLabel(label.Name)
+					if normalized != label.Name {
+						label.Name = normalized
 						d.tenantPushSanitizedStructuredMetadata.WithLabelValues(tenantID).Inc()
 					}
-					if strings.ContainsRune(structuredMetadata[i].Value, utf8.RuneError) {
-						structuredMetadata[i].Value = strings.Map(removeInvalidUtf, structuredMetadata[i].Value)
+					if strings.ContainsRune(label.Value, utf8.RuneError) {
+						label.Value = strings.Map(removeInvalidUtf, label.Value)
 						d.tenantPushSanitizedStructuredMetadata.WithLabelValues(tenantID).Inc()
 					}
-				}
+				})
 				if shouldDiscoverLevels {
 					pprof.Do(ctx, pprof.Labels("action", "discover_log_level"), func(_ context.Context) {
 						logLevel, ok := fieldDetector.extractLogLevel(lbs, structuredMetadata, entry)
@@ -1074,17 +1074,15 @@ func labelTemplate(lbls string, logger log.Logger) labels.Labels {
 	baseLbls, err := syntax.ParseLabels(lbls)
 	if err != nil {
 		level.Error(logger).Log("msg", "couldn't extract labels from stream", "stream", lbls)
-		return nil
+		return labels.EmptyLabels()
 	}
 
-	streamLabels := make([]labels.Label, len(baseLbls)+1)
-	copy(streamLabels, baseLbls)
-	streamLabels[len(baseLbls)] = labels.Label{Name: ingester.ShardLbName, Value: ingester.ShardLbPlaceholder}
-
-	sort.Sort(labels.Labels(streamLabels))
-
-	return streamLabels
+	labels.NewBuilder(baseLbls)
+	lb := labels.NewScratchBuilder(baseLbls.Len() + 1)
+	lb.Add(ingester.ShardLbName, ingester.ShardLbPlaceholder)
+	return lb.Labels()
 }
+
 
 func (d *Distributor) createShard(lbls labels.Labels, streamPattern string, shardNumber, numOfEntries int) logproto.Stream {
 	shardLabel := strconv.Itoa(shardNumber)
@@ -1294,16 +1292,16 @@ func (d *Distributor) parseStreamLabels(vContext validationContext, key string, 
 
 	ls, err := syntax.ParseLabels(key)
 	if err != nil {
-		retentionHours := d.tenantsRetention.RetentionHoursFor(vContext.userID, nil)
+		retentionHours := d.tenantsRetention.RetentionHoursFor(vContext.userID, labels.EmptyLabels())
 		// TODO: check for global policy.
-		return nil, "", 0, retentionHours, "", fmt.Errorf(validation.InvalidLabelsErrorMsg, key, err)
+		return labels.EmptyLabels(), "", 0, retentionHours, "", fmt.Errorf(validation.InvalidLabelsErrorMsg, key, err)
 	}
 
 	policy := streamResolver.PolicyFor(ls)
 	retentionHours := d.tenantsRetention.RetentionHoursFor(vContext.userID, ls)
 
 	if err := d.validator.ValidateLabels(vContext, ls, stream, retentionHours, policy); err != nil {
-		return nil, "", 0, retentionHours, policy, err
+		return labels.EmptyLabels(), "", 0, retentionHours, policy, err
 	}
 
 	lsHash := ls.Hash()

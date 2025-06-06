@@ -158,7 +158,7 @@ func (v Validator) IsInternalStream(ls labels.Labels) bool {
 
 // Validate labels returns an error if the labels are invalid and if the stream is an aggregated metric stream
 func (v Validator) ValidateLabels(vCtx validationContext, ls labels.Labels, stream logproto.Stream, retentionHours, policy string) error {
-	if len(ls) == 0 {
+	if ls.IsEmpty() {
 		// TODO: is this one correct?
 		validation.DiscardedSamples.WithLabelValues(validation.MissingLabels, vCtx.userID, retentionHours, policy).Inc()
 		return fmt.Errorf(validation.MissingLabelsErrorMsg)
@@ -169,7 +169,7 @@ func (v Validator) ValidateLabels(vCtx validationContext, ls labels.Labels, stre
 		return nil
 	}
 
-	numLabelNames := len(ls)
+	numLabelNames := ls.Len()
 	// This is a special case that's often added by the Loki infrastructure. It may result in allowing one extra label
 	// if incoming requests already have a service_name
 	if ls.Has(push.LabelServiceName) {
@@ -184,20 +184,24 @@ func (v Validator) ValidateLabels(vCtx validationContext, ls labels.Labels, stre
 	}
 
 	lastLabelName := ""
-	for _, l := range ls {
+	var err error
+	ls.Range(func(l labels.Label) {
+		if err != nil {
+			return
+		}
 		if len(l.Name) > vCtx.maxLabelNameLength {
 			v.reportDiscardedData(validation.LabelNameTooLong, vCtx, retentionHours, policy, entriesSize, len(stream.Entries))
-			return fmt.Errorf(validation.LabelNameTooLongErrorMsg, stream.Labels, l.Name)
+			err = fmt.Errorf(validation.LabelNameTooLongErrorMsg, stream.Labels, l.Name)
 		} else if len(l.Value) > vCtx.maxLabelValueLength {
 			v.reportDiscardedData(validation.LabelValueTooLong, vCtx, retentionHours, policy, entriesSize, len(stream.Entries))
-			return fmt.Errorf(validation.LabelValueTooLongErrorMsg, stream.Labels, l.Value)
+			err = fmt.Errorf(validation.LabelValueTooLongErrorMsg, stream.Labels, l.Value)
 		} else if cmp := strings.Compare(lastLabelName, l.Name); cmp == 0 {
 			v.reportDiscardedData(validation.DuplicateLabelNames, vCtx, retentionHours, policy, entriesSize, len(stream.Entries))
-			return fmt.Errorf(validation.DuplicateLabelNamesErrorMsg, stream.Labels, l.Name)
+			err = fmt.Errorf(validation.DuplicateLabelNamesErrorMsg, stream.Labels, l.Name)
 		}
 		lastLabelName = l.Name
-	}
-	return nil
+	})
+	return err
 }
 
 func (v Validator) reportDiscardedData(reason string, vCtx validationContext, retentionHours string, policy string, entrySize, entryCount int) {

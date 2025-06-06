@@ -162,9 +162,9 @@ func (m *ObjectMetastore) forEachLabel(ctx context.Context, start, end time.Time
 			continue
 		}
 
-		for _, streamLabel := range *streamLabels {
-			foreach(streamLabel)
-		}
+		streamLabels.Range(func(label labels.Label) {
+			foreach(label)
+		})
 	}
 
 	return nil
@@ -322,8 +322,6 @@ func addLabels(mtx *sync.Mutex, streams map[uint64][]*labels.Labels, newLabels *
 	mtx.Lock()
 	defer mtx.Unlock()
 
-	sort.Sort(newLabels)
-
 	key := newLabels.Hash()
 	matches, ok := streams[key]
 	if !ok {
@@ -429,7 +427,7 @@ func objectOverlapsRange(lbs labels.Labels, start, end time.Time) (bool, string)
 		objStart, objEnd time.Time
 		objPath          string
 	)
-	for _, lb := range lbs {
+	lbs.Range(func(lb labels.Label) {
 		if lb.Name == labelNameStart {
 			tsNano, err := strconv.ParseInt(lb.Value, 10, 64)
 			if err != nil {
@@ -447,7 +445,7 @@ func objectOverlapsRange(lbs labels.Labels, start, end time.Time) (bool, string)
 		if lb.Name == labelNamePath {
 			objPath = lb.Value
 		}
-	}
+	})
 	if objStart.IsZero() || objEnd.IsZero() {
 		return false, ""
 	}

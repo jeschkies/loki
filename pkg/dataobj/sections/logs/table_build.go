@@ -5,6 +5,7 @@ import (
 	"slices"
 
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/dataset"
+	"github.com/prometheus/prometheus/model/labels"
 )
 
 // buildTable builds a table from the set of provided records. The records are
@@ -29,12 +30,12 @@ func buildTable(buf *tableBuffer, pageSize int, compressionOpts dataset.Compress
 		_ = timestampBuilder.Append(i, dataset.Int64Value(record.Timestamp.UnixNano()))
 		_ = messageBuilder.Append(i, dataset.ByteArrayValue(record.Line))
 
-		for _, md := range record.Metadata {
+		record.Metadata.Range(func(label labels.Label) {
 			// Passing around md.Value as an unsafe slice is safe here: appending
 			// values is always read-only and the byte slice will never be mutated.
-			metadataBuilder := buf.Metadata(md.Name, pageSize, compressionOpts)
-			_ = metadataBuilder.Append(i, dataset.ByteArrayValue(unsafeSlice(md.Value, 0)))
-		}
+			metadataBuilder := buf.Metadata(label.Name, pageSize, compressionOpts)
+			_ = metadataBuilder.Append(i, dataset.ByteArrayValue(unsafeSlice(label.Value, 0)))
+		})
 	}
 
 	table, err := buf.Flush()

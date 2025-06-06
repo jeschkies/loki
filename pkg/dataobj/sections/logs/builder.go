@@ -106,9 +106,9 @@ func recordSize(record Record) int {
 
 	size++    // One byte per stream ID (for uvarint).
 	size += 8 // Eight bytes for timestamp.
-	for _, metadata := range record.Metadata {
-		size += len(metadata.Value)
-	}
+	record.Metadata.Range(func(label labels.Label) {
+		size += len(label.Value)
+	})
 	size += len(record.Line)
 
 	return size

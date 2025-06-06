@@ -98,9 +98,9 @@ func (s *Store) LabelNamesForMetricName(ctx context.Context, _ string, from, thr
 	uniqueNames := sync.Map{}
 
 	err = processor.ProcessParallel(ctx, func(_ uint64, stream streams.Stream) {
-		for _, label := range stream.Labels {
+		stream.Labels.Range(func(label labels.Label) {
 			uniqueNames.Store(label.Name, nil)
-		}
+		})
 	})
 	if err != nil {
 		return nil, err
@@ -271,14 +271,16 @@ func (sp *streamProcessor) processSingleReader(ctx context.Context, reader *stre
 	return processed, nil
 }
 
-func labelsToSeriesIdentifier(labels labels.Labels) logproto.SeriesIdentifier {
-	series := make([]logproto.SeriesIdentifier_LabelsEntry, len(labels))
-	for i, label := range labels {
+func labelsToSeriesIdentifier(lbls labels.Labels) logproto.SeriesIdentifier {
+	series := make([]logproto.SeriesIdentifier_LabelsEntry, lbls.Len())
+	i := 0
+	lbls.Range(func(label labels.Label) {
 		series[i] = logproto.SeriesIdentifier_LabelsEntry{
 			Key:   label.Name,
 			Value: label.Value,
 		}
-	}
+		i++
+	})
 	return logproto.SeriesIdentifier{
 		Labels: series,
 	}

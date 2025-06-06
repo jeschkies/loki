@@ -1,14 +1,12 @@
 package logs
 
 import (
-	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"io"
 	"iter"
 	"maps"
-	"sort"
 	"strconv"
 	"unsafe"
 
@@ -183,17 +181,11 @@ func (r *RowReader) initReader(ctx context.Context) error {
 }
 
 func convertMetadata(md push.LabelsAdapter) labels.Labels {
-	l := make(labels.Labels, 0, len(md))
+	b := labels.NewScratchBuilder(len(md))
 	for _, label := range md {
-		l = append(l, labels.Label{Name: label.Name, Value: label.Value})
+		b.Add(label.Name, label.Value)
 	}
-	sort.Slice(l, func(i, j int) bool {
-		if l[i].Name == l[j].Name {
-			return cmp.Compare(l[i].Value, l[j].Value) < 0
-		}
-		return cmp.Compare(l[i].Name, l[j].Name) < 0
-	})
-	return l
+	return b.Labels()
 }
 
 // Reset resets the RowReader with a new Section to read from. Reset allows

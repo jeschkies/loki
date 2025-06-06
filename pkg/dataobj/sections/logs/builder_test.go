@@ -18,19 +18,19 @@ func Test(t *testing.T) {
 		{
 			StreamID:  1,
 			Timestamp: time.Unix(10, 0),
-			Metadata:  nil,
+			Metadata:  labels.EmptyLabels(),
 			Line:      []byte("hello world"),
 		},
 		{
 			StreamID:  2,
 			Timestamp: time.Unix(100, 0),
-			Metadata:  []labels.Label{{Name: "cluster", Value: "test"}, {Name: "app", Value: "bar"}},
+			Metadata:  labels.FromStrings("cluster", "test", "app", "bar"),
 			Line:      []byte("goodbye world"),
 		},
 		{
 			StreamID:  1,
 			Timestamp: time.Unix(5, 0),
-			Metadata:  []labels.Label{{Name: "cluster", Value: "test"}, {Name: "app", Value: "foo"}},
+			Metadata:  labels.FromStrings("cluster", "test", "app", "foo"),
 			Line:      []byte("foo bar"),
 		},
 	}
@@ -55,19 +55,19 @@ func Test(t *testing.T) {
 		{
 			StreamID:  1,
 			Timestamp: time.Unix(5, 0),
-			Metadata:  []labels.Label{{Name: "app", Value: "foo"}, {Name: "cluster", Value: "test"}},
+			Metadata:  labels.FromStrings("app", "foo", "cluster", "test"),
 			Line:      []byte("foo bar"),
 		},
 		{
 			StreamID:  1,
 			Timestamp: time.Unix(10, 0),
-			Metadata:  []labels.Label{},
+			Metadata:  labels.EmptyLabels(),
 			Line:      []byte("hello world"),
 		},
 		{
 			StreamID:  2,
 			Timestamp: time.Unix(100, 0),
-			Metadata:  []labels.Label{{Name: "app", Value: "bar"}, {Name: "cluster", Value: "test"}},
+			Metadata:  labels.FromStrings("app", "bar", "cluster", "test"),
 			Line:      []byte("goodbye world"),
 		},
 	}

@@ -43,7 +43,7 @@ type Stream struct {
 // Reset zeroes all values in the stream struct so it can be reused.
 func (s *Stream) Reset() {
 	s.ID = 0
-	s.Labels = nil
+	s.Labels = labels.EmptyLabels()
 	s.MinTimestamp = time.Time{}
 	s.MaxTimestamp = time.Time{}
 	s.UncompressedSize = 0

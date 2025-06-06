@@ -2,7 +2,6 @@ package querier
 
 import (
 	"context"
-	"sort"
 	"testing"
 	"time"
 
@@ -316,10 +315,9 @@ func TestStore_LabelValuesForMetricName(t *testing.T) {
 }
 
 func labelsFromSeriesID(id logproto.SeriesIdentifier) string {
-	ls := make(labels.Labels, 0, len(id.Labels))
+	b := labels.NewScratchBuilder(len(id.Labels))
 	for _, l := range id.Labels {
-		ls = append(ls, labels.Label{Name: l.Key, Value: l.Value})
+		b.Add(l.Key, l.Value)
 	}
-	sort.Sort(ls)
-	return ls.String()
+	return b.Labels().String()
 }
