@@ -238,8 +238,8 @@ func probabilisticQuantileSampleFromProto(proto *logproto.QuantileSketchSample) 
 		return ProbabilisticQuantileSample{}, err
 	}
 	out := ProbabilisticQuantileSample{
-		T:      proto.TimestampMs,
-		F:      s,
+		T: proto.TimestampMs,
+		F: s,
 	}
 
 	b := labels.NewScratchBuilder(len(proto.Metric))
@@ -318,9 +318,7 @@ type QuantileSketchMatrixStepEvaluator struct {
 }
 
 func NewQuantileSketchMatrixStepEvaluator(m ProbabilisticQuantileMatrix, params Params) *QuantileSketchMatrixStepEvaluator {
-	var (
-		step = params.Step()
-	)
+	step := params.Step()
 	return &QuantileSketchMatrixStepEvaluator{
 		end:  params.End(),
 		ts:   params.Start().Add(-step), // will be corrected on first Next() call

@@ -1231,7 +1231,7 @@ func (r *VectorIterator) Next() (bool, int64, StepResult) {
 		return false, 0, nil
 	}
 	results := make(promql.Vector, 0)
-	vectorPoint := promql.Sample{T: r.currentMs, F: r.val}
+	vectorPoint := promql.Sample{T: r.currentMs, F: r.val, Metric: labels.EmptyLabels()}
 	results = append(results, vectorPoint)
 	return true, r.currentMs, SampleVector(results)
 }
@@ -1523,26 +1523,13 @@ func (it *bufferedVariantsIterator) getVariantIndex(lbls string) int {
 		return -1
 	}
 
-	var val int
-	metric.Range(func(lbl labels.Label) {
-		if val != -1 {
-			return
+	if variant := metric.Get(constants.VariantLabel); variant != "" {
+		val, err := strconv.Atoi(variant)
+		if err != nil {
+			it.err = err
+			return -1
 		}
-		// TODO: make constant
-		if lbl.Name == constants.VariantLabel {
-			val, err = strconv.Atoi(lbl.Value)
-			if err != nil {
-				val = -1
-				return
-			}
-		}
-	})
-
-	if val != -1 {
 		return val
-	} else if err != nil {
-		it.err = err
-		return -1
 	}
 
 	it.err = fmt.Errorf("variant label not found in %s", lbls)
