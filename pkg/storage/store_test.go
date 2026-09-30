@@ -884,6 +884,11 @@ func (p *mockStreamPipeline) Process(ts int64, line []byte, lbs labels.Labels) (
 	return p.wrappedSP.Process(ts, line, lbs)
 }
 
+func (p *mockStreamPipeline) ProcessBatch(b *lokilog.ArrowBatch) *lokilog.ArrowBatch {
+	p.called++
+	return p.wrappedSP.ProcessBatch(b)
+}
+
 func (p *mockStreamPipeline) ProcessString(ts int64, line string, lbs labels.Labels) (string, lokilog.LabelsResult, bool) {
 	p.called++
 	return p.wrappedSP.ProcessString(ts, line, lbs)
@@ -1002,6 +1007,11 @@ func (p *mockStreamExtractor) Process(ts int64, line []byte, lbs labels.Labels) 
 func (p *mockStreamExtractor) ProcessString(ts int64, line string, lbs labels.Labels) (lokilog.ExtractedSample, bool) {
 	p.called++
 	return p.wrappedSP.ProcessString(ts, line, lbs)
+}
+
+func (p *mockStreamExtractor) ProcessBatch(b *lokilog.ArrowBatch) (*lokilog.ArrowBatch, []float64) {
+	p.called++
+	return p.wrappedSP.ProcessBatch(b)
 }
 
 func Test_store_GetSeries(t *testing.T) {

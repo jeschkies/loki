@@ -580,3 +580,7 @@ func (p *stubStreamExtractor) ProcessString(
 func (p *stubStreamExtractor) ReferencedStructuredMetadata() bool {
 	return false
 }
+
+func (p *stubStreamExtractor) ProcessBatch(b *ArrowBatch) (*ArrowBatch, []float64) {
+	return processBatchFallback(p, b)
+}

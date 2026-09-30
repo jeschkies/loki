@@ -288,6 +288,17 @@ func (p *stubStreamPipeline) ReferencedStructuredMetadata() bool {
 	return false
 }
 
+func (p *stubStreamPipeline) ProcessBatch(b *ArrowBatch) *ArrowBatch {
+	rows := b.rows()
+	return &ArrowBatch{
+		Timestamps: b.Timestamps,
+		LineColumn: b.LineColumn,
+		Selection:  rows,
+		Lines:      make([][]byte, len(rows)),
+		Labels:     make([]LabelsResult, len(rows)),
+	}
+}
+
 var (
 	resMatches    bool
 	resLine       []byte

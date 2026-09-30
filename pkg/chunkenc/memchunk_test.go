@@ -1028,6 +1028,16 @@ func (nomatchPipeline) ReferencedStructuredMetadata() bool {
 	return false
 }
 
+func (nomatchPipeline) ProcessBatch(b *log.ArrowBatch) *log.ArrowBatch {
+	// nomatchPipeline never matches, so every row is dropped.
+	return &log.ArrowBatch{
+		Timestamps:         b.Timestamps,
+		LineColumn:         b.LineColumn,
+		StructuredMetadata: b.StructuredMetadata,
+		Selection:          []int32{},
+	}
+}
+
 func BenchmarkRead(b *testing.B) {
 	for _, bs := range testBlockSizes {
 		for _, enc := range testEncodings {
@@ -1097,6 +1107,16 @@ func (noopTestPipeline) ProcessString(_ int64, line string, _ labels.Labels) (st
 
 func (noopTestPipeline) ReferencedStructuredMetadata() bool {
 	return false
+}
+
+func (noopTestPipeline) ProcessBatch(b *log.ArrowBatch) *log.ArrowBatch {
+	// noopTestPipeline never matches, so every row is dropped.
+	return &log.ArrowBatch{
+		Timestamps:         b.Timestamps,
+		LineColumn:         b.LineColumn,
+		StructuredMetadata: b.StructuredMetadata,
+		Selection:          []int32{},
+	}
 }
 
 func BenchmarkBackwardIterator(b *testing.B) {

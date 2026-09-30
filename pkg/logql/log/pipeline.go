@@ -25,6 +25,12 @@ type StreamPipeline interface {
 	// The buffer returned for the log line can be reused on subsequent calls to Process and therefore must be copied.
 	Process(ts int64, line []byte, structuredMetadata labels.Labels) (resultLine []byte, resultLabels LabelsResult, matches bool)
 	ProcessString(ts int64, line string, structuredMetadata labels.Labels) (resultLine string, resultLabels LabelsResult, matches bool)
+	// ProcessBatch runs stages against a whole Batch of lines from this
+	// stream at once, using each stage's vectorized fast path where
+	// available and falling back to line-by-line processing (via Process)
+	// otherwise. This is proof-of-concept code, not yet wired into any
+	// production caller.
+	ProcessBatch(b *ArrowBatch) *ArrowBatch
 	ReferencedStructuredMetadata() bool
 }
 
@@ -102,6 +108,10 @@ func (n noopStreamPipeline) ProcessString(ts int64, line string, structuredMetad
 
 func (n noopStreamPipeline) BaseLabels() LabelsResult { return n.builder.currentResult }
 
+func (n noopStreamPipeline) ProcessBatch(b *ArrowBatch) *ArrowBatch {
+	return materializeBatchLabels(b, n.builder, (*LabelsBuilder).LabelsResult)
+}
+
 type noopStage struct{}
 
 func (noopStage) Process(_ int64, line []byte, _ *LabelsBuilder) ([]byte, bool) {
@@ -112,10 +122,26 @@ func (noopStage) RequiredLabelNames() []string { return []string{} }
 type StageFunc struct {
 	process        func(ts int64, line []byte, lbs *LabelsBuilder) ([]byte, bool)
 	requiredLabels []string
+
+	// processBatch, when set, gives this Stage a real vectorized fast path.
+	// When nil, ProcessBatch falls back to running process line-by-line
+	// over the batch's current selection.
+	processBatch func(b *ArrowBatch) *ArrowBatch
 }
 
 func (fn StageFunc) Process(ts int64, line []byte, lbs *LabelsBuilder) ([]byte, bool) {
 	return fn.process(ts, line, lbs)
+}
+
+// ProcessBatch implements BatchProcessor. Every StageFunc satisfies
+// BatchProcessor, but only those built with a processBatch closure (i.e.
+// stages known to never touch labels) have a real vectorized fast path;
+// others fall back to a correctness-preserving line-by-line loop.
+func (fn StageFunc) ProcessBatch(b *ArrowBatch) *ArrowBatch {
+	if fn.processBatch != nil {
+		return fn.processBatch(b)
+	}
+	return runSingleStageLineByLine(fn.process, b)
 }
 
 func (fn StageFunc) RequiredLabelNames() []string {
@@ -221,6 +247,24 @@ func (p *streamPipeline) ProcessString(ts int64, line string, structuredMetadata
 
 func (p *streamPipeline) BaseLabels() LabelsResult { return p.builder.currentResult }
 
+// ProcessBatch implements StreamPipeline. It runs the leading run of
+// batch-capable stages directly against b (each one only ever narrowing
+// b.Selection), and as soon as it reaches a stage with no BatchProcessor
+// support at all (e.g. a parser or label filter, which need per-row label
+// state that isn't modeled here), it hands the rest of the chain to
+// runRemainingStagesPerRow, which replays exactly what Process does today,
+// once per row still selected.
+func (p *streamPipeline) ProcessBatch(b *ArrowBatch) *ArrowBatch {
+	b, i := runBatchCapableStages(p.stages, b)
+	if b.Empty() {
+		return b
+	}
+	if i == len(p.stages) {
+		return materializeBatchLabels(b, p.builder, (*LabelsBuilder).LabelsResult)
+	}
+	return runRemainingStagesPerRow(p.stages[i:], b, p.builder)
+}
+
 // PipelineFilter contains a set of matchers and a pipeline that, when matched,
 // causes an entry from a log stream to be skipped. Matching entries must also
 // fall between 'start' and 'end', inclusive
@@ -295,6 +339,39 @@ func (sp *filteringStreamPipeline) ReferencedStructuredMetadata() bool {
 
 func (sp *filteringStreamPipeline) BaseLabels() LabelsResult {
 	return sp.pipeline.BaseLabels()
+}
+
+// ProcessBatch implements StreamPipeline. This is a correctness-preserving,
+// unoptimized implementation: deletion/retention filtering isn't the target
+// of this proof-of-concept's batch-vs-line-by-line comparison, so it simply
+// delegates to the existing, well-tested Process per row rather than trying
+// to vectorize the time-range + matcher check.
+func (sp *filteringStreamPipeline) ProcessBatch(b *ArrowBatch) *ArrowBatch {
+	rows := b.rows()
+
+	newSelection := make([]int32, 0, len(rows))
+	lines := make([][]byte, 0, len(rows))
+	results := make([]LabelsResult, 0, len(rows))
+
+	for _, row := range rows {
+		ts, line, sm := b.get(row)
+		resultLine, resultLabels, ok := sp.Process(ts, line, sm)
+		if !ok {
+			continue
+		}
+		newSelection = append(newSelection, row)
+		lines = append(lines, resultLine)
+		results = append(results, resultLabels)
+	}
+
+	return &ArrowBatch{
+		Timestamps:         b.Timestamps,
+		LineColumn:         b.LineColumn,
+		StructuredMetadata: b.StructuredMetadata,
+		Selection:          newSelection,
+		Lines:              lines,
+		Labels:             results,
+	}
 }
 
 func (sp *filteringStreamPipeline) Process(ts int64, line []byte, structuredMetadata labels.Labels) ([]byte, LabelsResult, bool) {

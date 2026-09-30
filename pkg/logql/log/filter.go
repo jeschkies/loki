@@ -536,10 +536,12 @@ func containsLower(line, substr []byte) bool {
 }
 
 func (l containsFilter) ToStage() Stage {
+	process := func(_ int64, line []byte, _ *LabelsBuilder) ([]byte, bool) {
+		return line, l.Filter(line)
+	}
 	return StageFunc{
-		process: func(_ int64, line []byte, _ *LabelsBuilder) ([]byte, bool) {
-			return line, l.Filter(line)
-		},
+		process:      process,
+		processBatch: containsBatch(l.match, l.caseInsensitive, process),
 	}
 }
 
