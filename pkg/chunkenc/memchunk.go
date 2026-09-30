@@ -1224,7 +1224,13 @@ func (b encBlock) Iterator(ctx context.Context, pipeline log.StreamPipeline) ite
 	if len(b.b) == 0 {
 		return iter.NoopEntryIterator
 	}
-	return newEntryIterator(ctx, compression.GetReaderPool(b.enc), b.b, pipeline, b.format, b.symbolizer)
+	// Chunk reordering on flush disables processing and needs the original,
+	// unbatched line data verbatim; the batch path always runs a real
+	// ProcessBatch, so keep that narrow case on the old per-line path.
+	if isProcessingDisabled(ctx) {
+		return newEntryIterator(ctx, compression.GetReaderPool(b.enc), b.b, pipeline, b.format, b.symbolizer)
+	}
+	return newBatchEntryIterator(ctx, compression.GetReaderPool(b.enc), b.b, pipeline, b.format, b.symbolizer, b.numEntries, b.uncompressedSize)
 }
 
 func (b encBlock) SampleIterator(
@@ -1234,13 +1240,15 @@ func (b encBlock) SampleIterator(
 	if len(b.b) == 0 {
 		return iter.NoopSampleIterator
 	}
-	return newSampleIterator(
+	return newBatchSampleIterator(
 		ctx,
 		compression.GetReaderPool(b.enc),
 		b.b,
 		b.format,
 		b.symbolizer,
 		extractor,
+		b.numEntries,
+		b.uncompressedSize,
 	)
 }
 

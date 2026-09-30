@@ -799,7 +799,10 @@ func Test_PipelineWrapper(t *testing.T) {
 
 	require.Equal(t, "test-user", wrapper.tenant)
 	require.Equal(t, "{foo=~\"ba.*\"}", wrapper.query)
-	require.Equal(t, 28, wrapper.pipeline.sp.called) // we've passed every log line through the wrapper
+	// chunkenc now decodes a whole compressed block per call and runs the
+	// wrapped pipeline's ProcessBatch once per block instead of Process
+	// once per line, so this counts wrapper invocations, not matched lines.
+	require.Equal(t, 4, wrapper.pipeline.sp.called)
 }
 
 func Test_PipelineWrapper_disabled(t *testing.T) {
@@ -920,7 +923,10 @@ func Test_SampleWrapper(t *testing.T) {
 
 	require.Equal(t, "test-user", wrapper.tenant)
 	require.Equal(t, "count_over_time({foo=~\"ba.*\"}[1s])", wrapper.query)
-	require.Equal(t, 28, wrapper.extractor.sp.called) // we've passed every log line through the wrapper
+	// chunkenc now decodes a whole compressed block per call and runs the
+	// wrapped extractor's ProcessBatch once per block instead of Process
+	// once per line, so this counts wrapper invocations, not matched lines.
+	require.Equal(t, 4, wrapper.extractor.sp.called)
 }
 
 func Test_SampleWrapper_disabled(t *testing.T) {
