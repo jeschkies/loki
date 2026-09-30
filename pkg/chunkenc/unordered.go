@@ -395,6 +395,10 @@ func (hb *unorderedHeadBlock) SampleIterator(
 // nolint:unused
 // serialise is used in creating an ordered, compressed block from an unorderedHeadBlock
 func (hb *unorderedHeadBlock) Serialise(pool compression.WriterPool) ([]byte, error) {
+	if hb.format == UnorderedWithColumnarHeadBlockFmt {
+		return serialiseColumnarBlock(hb)
+	}
+
 	inBuf := serializeBytesBufferPool.Get().(*bytes.Buffer)
 	defer func() {
 		inBuf.Reset()

@@ -55,6 +55,8 @@ func (f HeadBlockFmt) String() string {
 		return "unordered"
 	case f == UnorderedWithStructuredMetadataHeadBlockFmt:
 		return "unordered with structured metadata"
+	case f == UnorderedWithColumnarHeadBlockFmt:
+		return "unordered with columnar encoding"
 	default:
 		return fmt.Sprintf("unknown: %v", byte(f))
 	}
@@ -78,6 +80,10 @@ const (
 	OrderedHeadBlockFmt
 	UnorderedHeadBlockFmt
 	UnorderedWithStructuredMetadataHeadBlockFmt
+	// UnorderedWithColumnarHeadBlockFmt serialises blocks via
+	// serialiseColumnarBlock (see columnar.go / ChunkFormatV5) instead of
+	// unorderedHeadBlock.Serialise's row-major layout.
+	UnorderedWithColumnarHeadBlockFmt
 )
 
 // ChunkHeadFormatFor returns corresponding head block format for the given `chunkfmt`.
@@ -88,6 +94,10 @@ func ChunkHeadFormatFor(chunkfmt byte) HeadBlockFmt {
 
 	if chunkfmt == ChunkFormatV3 {
 		return UnorderedHeadBlockFmt
+	}
+
+	if chunkfmt == ChunkFormatV5 {
+		return UnorderedWithColumnarHeadBlockFmt
 	}
 
 	// return the latest head format for all chunkformat >v3
@@ -362,6 +372,10 @@ func panicIfInvalidFormat(chunkFmt byte, head HeadBlockFmt) {
 	if chunkFmt == ChunkFormatV4 && head != UnorderedWithStructuredMetadataHeadBlockFmt {
 		fmt.Println("received head fmt", head.String())
 		panic("only UnorderedWithStructuredMetadataHeadBlockFmt is supported for V4 chunks")
+	}
+	if chunkFmt == ChunkFormatV5 && head != UnorderedWithColumnarHeadBlockFmt {
+		fmt.Println("received head fmt", head.String())
+		panic("only UnorderedWithColumnarHeadBlockFmt is supported for V5 chunks")
 	}
 }
 

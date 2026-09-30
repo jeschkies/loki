@@ -73,6 +73,17 @@ func decodeBlockToArrowBatch(ctx context.Context, pool compression.ReaderPool, b
 	return batch, nil
 }
 
+// decodeBlockBytesToArrowBatch dispatches to the right block decoder for
+// format: ChunkFormatV5's columnar layout decodes directly, in three bulk
+// operations (see columnar.go); every earlier, row-major format goes
+// through decodeBlockToArrowBatch's per-entry moveNext loop.
+func decodeBlockBytesToArrowBatch(ctx context.Context, pool compression.ReaderPool, b []byte, format byte, symbolizer *symbolizer, numEntries, uncompressedSize int) (*log.ArrowBatch, error) {
+	if format == ChunkFormatV5 {
+		return decodeColumnarBlockToArrowBatch(ctx, b, numEntries, symbolizer)
+	}
+	return decodeBlockToArrowBatch(ctx, pool, b, format, symbolizer, numEntries, uncompressedSize)
+}
+
 // entryBatchBufferedIterator is entryBufferedIterator's block-at-a-time
 // counterpart: it decodes a whole compressed block into an ArrowBatch, runs
 // the stream pipeline's ProcessBatch once for the block, then serves
@@ -124,7 +135,7 @@ func (e *entryBatchBufferedIterator) ensureDecoded() bool {
 	}
 	e.decoded = true
 
-	block, err := decodeBlockToArrowBatch(e.ctx, e.pool, e.origBytes, e.format, e.symbolizer, e.numEntries, e.uncompressedSize)
+	block, err := decodeBlockBytesToArrowBatch(e.ctx, e.pool, e.origBytes, e.format, e.symbolizer, e.numEntries, e.uncompressedSize)
 	if err != nil {
 		e.decErr = err
 		return false
@@ -236,7 +247,7 @@ func (e *sampleBatchBufferedIterator) ensureDecoded() bool {
 	}
 	e.decoded = true
 
-	block, err := decodeBlockToArrowBatch(e.ctx, e.pool, e.origBytes, e.format, e.symbolizer, e.numEntries, e.uncompressedSize)
+	block, err := decodeBlockBytesToArrowBatch(e.ctx, e.pool, e.origBytes, e.format, e.symbolizer, e.numEntries, e.uncompressedSize)
 	if err != nil {
 		e.decErr = err
 		return false

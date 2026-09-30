@@ -30,10 +30,19 @@ const benchNeedle = "matchme"
 // end, including decompression.
 func buildBenchChunk(tb testing.TB, enc compression.Codec, blockSize int, totalBytes uint64, selectivity float64, seed int64) (*MemChunk, uint64) {
 	tb.Helper()
+	return buildBenchChunkFmt(tb, ChunkFormatV4, UnorderedWithStructuredMetadataHeadBlockFmt, enc, blockSize, totalBytes, selectivity, seed)
+}
+
+// buildBenchChunkFmt is buildBenchChunk with the chunk/head-block format as
+// a parameter, so the same synthetic data can be encoded under different
+// wire formats (e.g. ChunkFormatV4 vs ChunkFormatV5) for a direct
+// comparison.
+func buildBenchChunkFmt(tb testing.TB, chunkFmt byte, headFmt HeadBlockFmt, enc compression.Codec, blockSize int, totalBytes uint64, selectivity float64, seed int64) (*MemChunk, uint64) {
+	tb.Helper()
 	r := rand.New(rand.NewSource(seed))
 	// targetSize is set far above totalBytes so the chunk is never cut
 	// early - we want one chunk split into multiple *blocks* by blockSize.
-	c := NewMemChunk(ChunkFormatV4, enc, UnorderedWithStructuredMetadataHeadBlockFmt, blockSize, 1<<30)
+	c := NewMemChunk(chunkFmt, enc, headFmt, blockSize, 1<<30)
 
 	var size uint64
 	i := int64(0)
