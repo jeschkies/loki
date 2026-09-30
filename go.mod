@@ -115,6 +115,7 @@ require (
 	github.com/grafana/jsonparser v0.0.0-20250909130937-5f438463be34
 	github.com/grafana/loki/pkg/push v0.0.0-20250630054201-94c0ba7b0952
 	github.com/influxdata/tdigest v0.0.2-0.20210216194612-fc98d27c9e8b
+	github.com/jeschkies/go-memmem v0.2.0
 	github.com/joshdk/go-junit v1.0.0
 	github.com/mitchellh/colorstring v0.0.0-20190213212951-d06e56a500db
 	github.com/ncw/swift/v2 v2.0.5
