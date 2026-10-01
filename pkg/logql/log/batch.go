@@ -43,6 +43,23 @@ func (b *ArrowBatch) NumRows() int {
 // Empty reports whether no rows remain selected.
 func (b *ArrowBatch) Empty() bool { return b.NumRows() == 0 }
 
+// Release releases b's LineColumn (an Arrow array, refcounted like any
+// other) and returns b's Selection to the shared selection pool (see
+// arrowfilter.PutSelection) for reuse by a later batch. Callers - the
+// per-block iterators that own an ArrowBatch's whole lifecycle - should
+// call this once, when they're done with b, instead of releasing
+// LineColumn directly: this is also where Selection's own cleanup belongs,
+// now that it's pooled rather than always fresh.
+//
+// b must not be used after calling Release.
+func (b *ArrowBatch) Release() {
+	if b.LineColumn != nil {
+		b.LineColumn.Release()
+	}
+	arrowfilter.PutSelection(b.Selection)
+	b.Selection = nil
+}
+
 // rows returns the current selection, materializing the identity selection
 // if none has been set yet.
 func (b *ArrowBatch) rows() []int32 {
@@ -288,6 +305,15 @@ func containsBatch(match []byte, caseInsensitive bool, fallback func(ts int64, l
 			// arrowfilter.Contains is case-sensitive only; fall back.
 			return runSingleStageLineByLine(fallback, b)
 		}
-		return b.withSelection(arrowfilter.Contains(b.LineColumn, match, b.Selection))
+		old := b.Selection
+		newSel := arrowfilter.Contains(b.LineColumn, match, old)
+		// old is superseded by newSel and nothing else references it - this
+		// *ArrowBatch is about to be discarded by the caller (see
+		// runBatchCapableStages, which reassigns its own b to what this
+		// returns) - so it's safe to return old to the pool now, one stage
+		// before the final result's own Selection gets returned via
+		// ArrowBatch.Release.
+		arrowfilter.PutSelection(old)
+		return b.withSelection(newSel)
 	}
 }

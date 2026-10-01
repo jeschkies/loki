@@ -16,11 +16,16 @@ import (
 // non-nil, only those row indices are checked and the result is a subset of
 // selection; otherwise all rows in col are checked.
 //
+// The returned slice's backing array comes from the shared selection pool
+// (see GetSelection) - callers should return it via PutSelection once
+// nothing else references it (superseded by a later stage, or the owning
+// ArrowBatch released).
+//
 // ContainsNaive is the baseline row-by-row implementation that [Contains]
 // is benchmarked against.
 func ContainsNaive(col *array.String, needle []byte, selection []int32) []int32 {
 	if selection != nil {
-		out := make([]int32, 0, len(selection))
+		out := GetSelection(len(selection))
 		for _, row := range selection {
 			if col.IsValid(int(row)) && bytes.Contains(unsafeBytes(col.Value(int(row))), needle) {
 				out = append(out, row)
@@ -29,7 +34,7 @@ func ContainsNaive(col *array.String, needle []byte, selection []int32) []int32 
 		return out
 	}
 
-	out := make([]int32, 0, col.Len())
+	out := GetSelection(col.Len())
 	for i := range col.Len() {
 		if col.IsValid(i) && bytes.Contains(unsafeBytes(col.Value(i)), needle) {
 			out = append(out, int32(i))
@@ -51,6 +56,11 @@ func ContainsNaive(col *array.String, needle []byte, selection []int32) []int32 
 // is non-nil (i.e. col has already been filtered down by an earlier stage),
 // Contains falls back to the row-by-row approach, since the remaining rows
 // are not necessarily contiguous in the value buffer.
+//
+// The returned slice's backing array comes from the shared selection pool
+// (see GetSelection) - callers should return it via PutSelection once
+// nothing else references it (superseded by a later stage, or the owning
+// ArrowBatch released).
 func Contains(col *array.String, needle []byte, selection []int32) []int32 {
 	if selection != nil {
 		return ContainsNaive(col, needle, selection)
@@ -68,7 +78,7 @@ func scanContains(col *array.String, needle []byte, indexFunc func(haystack, nee
 	}
 
 	if len(needle) == 0 {
-		out := make([]int32, col.Len())
+		out := GetSelection(col.Len())[:col.Len()]
 		for i := range out {
 			out[i] = int32(i)
 		}
@@ -84,7 +94,8 @@ func scanContains(col *array.String, needle []byte, indexFunc func(haystack, nee
 	nRows := len(offsets) - 1
 	// Pre-size to the worst case (every row matches) so a high-selectivity
 	// result never triggers append's incremental reallocate-and-copy growth.
-	out := make([]int32, 0, nRows)
+	// GetSelection recycles a pooled buffer instead of allocating fresh.
+	out := GetSelection(nRows)
 	pos, row := 0, 0
 
 	for row < nRows {

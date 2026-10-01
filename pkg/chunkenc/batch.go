@@ -183,8 +183,8 @@ func (e *entryBatchBufferedIterator) Close() error {
 	if e.pipeline.ReferencedStructuredMetadata() {
 		e.stats.SetQueryReferencedStructuredMetadata()
 	}
-	if e.batch != nil && e.batch.LineColumn != nil {
-		e.batch.LineColumn.Release()
+	if e.batch != nil {
+		e.batch.Release()
 	}
 	return e.decErr
 }
@@ -298,8 +298,8 @@ func (e *sampleBatchBufferedIterator) Close() error {
 	if e.extractor.ReferencedStructuredMetadata() {
 		e.stats.SetQueryReferencedStructuredMetadata()
 	}
-	if e.batch != nil && e.batch.LineColumn != nil {
-		e.batch.LineColumn.Release()
+	if e.batch != nil {
+		e.batch.Release()
 	}
 	return e.decErr
 }
