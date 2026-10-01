@@ -11,7 +11,6 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/memory"
-	"github.com/prometheus/prometheus/model/labels"
 
 	"github.com/grafana/loki/v3/pkg/logproto"
 	"github.com/grafana/loki/v3/pkg/logql/log"
@@ -126,6 +125,26 @@ func decodeColumnarBlockToArrowBatch(ctx context.Context, b []byte, numEntries i
 
 	pos := 0
 
+	// timestampsBuf/valuesBuf/offsetsBuf are all pooled, arrowAllocator-
+	// backed buffers (see their own allocation sites below) that need to
+	// be returned to the pool if this function returns early with an
+	// error - a truncated/corrupt block can fail at any point after one
+	// or more of them has already been allocated. success is set just
+	// before the final, non-error return; until then, this defer treats
+	// every return as an error path.
+	var timestampsBuf, valuesBuf, offsetsBuf *memory.Buffer
+	success := false
+	defer func() {
+		if success {
+			return
+		}
+		for _, buf := range [...]*memory.Buffer{timestampsBuf, valuesBuf, offsetsBuf} {
+			if buf != nil {
+				buf.Release()
+			}
+		}
+	}()
+
 	readUvarint := func() (uint64, error) {
 		v, n := binary.Uvarint(b[pos:])
 		if n <= 0 {
@@ -135,18 +154,56 @@ func decodeColumnarBlockToArrowBatch(ctx context.Context, b []byte, numEntries i
 		return v, nil
 	}
 
-	tsLen, err := readUvarint()
+	// readSection reads a uvarint-prefixed length, then returns that
+	// many bytes starting at pos, advancing pos past them. It checks
+	// the length against b's remaining bytes before slicing: a
+	// corrupted or truncated block can make that length arbitrarily
+	// large, and b[pos:pos+length] would otherwise either panic (if
+	// the requested end exceeds cap(b)) or silently read into whatever
+	// garbage follows (if it's still within cap(b) but past the data
+	// actually meant to be there - cap(b) is not under this function's
+	// control, so len(b) is the only bound it can trust).
+	readSection := func() ([]byte, error) {
+		length, err := readUvarint()
+		if err != nil {
+			return nil, err
+		}
+		if length > uint64(len(b)-pos) {
+			return nil, fmt.Errorf("invalid columnar block: truncated section at offset %d: need %d bytes, have %d", pos, length, len(b)-pos)
+		}
+		section := b[pos : pos+int(length)]
+		pos += int(length)
+		return section, nil
+	}
+
+	tsBytes, err := readSection()
 	if err != nil {
 		return nil, err
 	}
-	tsBytes := b[pos : pos+int(tsLen)]
-	pos += int(tsLen)
 
-	timestamps := decodeTimestampsDoD(tsBytes, numEntries, nil)
+	// Same pooling trick as valuesBuf/offsetsBuf below: decode straight
+	// into a pooled, arrowAllocator-backed buffer instead of the plain
+	// make([]int64, n) a nil dst would force decodeTimestampsDoD to
+	// allocate internally - decodeTimestampsDoD already supports
+	// decoding in place into a reused dst, nil just never took advantage
+	// of that. Once the resulting array's/batch's refcount hits zero,
+	// ArrowBatch.Release returns this buffer to the pool via
+	// TimestampsBuf, instead of it becoming unpooled GC garbage.
+	var timestamps []int64
+	if numEntries > 0 {
+		timestampsBuf = memory.NewResizableBuffer(arrowAllocator)
+		timestampsBuf.Resize(numEntries * arrow.Int64SizeBytes)
+		timestamps = decodeTimestampsDoD(tsBytes, numEntries, arrow.Int64Traits.CastFromBytes(timestampsBuf.Bytes()))
+	} else {
+		timestamps = decodeTimestampsDoD(tsBytes, numEntries, nil)
+	}
 
 	llLen, err := readUvarint()
 	if err != nil {
 		return nil, err
+	}
+	if llLen > uint64(len(b)-pos) {
+		return nil, fmt.Errorf("invalid columnar block: truncated line-lengths section at offset %d: need %d bytes, have %d", pos, llLen, len(b)-pos)
 	}
 	llEnd := pos + int(llLen)
 
@@ -167,12 +224,10 @@ func decodeColumnarBlockToArrowBatch(ctx context.Context, b []byte, numEntries i
 	if err != nil {
 		return nil, err
 	}
-	compLen, err := readUvarint()
+	compressed, err := readSection()
 	if err != nil {
 		return nil, err
 	}
-	compressed := b[pos : pos+int(compLen)]
-	pos += int(compLen)
 
 	if totalLineBytes != int(rawLen) {
 		return nil, fmt.Errorf("invalid columnar block: line lengths sum to %d, uncompressed blob length says %d", totalLineBytes, rawLen)
@@ -189,29 +244,27 @@ func decodeColumnarBlockToArrowBatch(ctx context.Context, b []byte, numEntries i
 	// wrapped in memory.NewBufferBytes (the array's earlier approach)
 	// could never do - NewBufferBytes-backed buffers have no allocator to
 	// free back to, by design.
-	valuesBuf := memory.NewResizableBuffer(arrowAllocator)
+	valuesBuf = memory.NewResizableBuffer(arrowAllocator)
 	valuesBuf.Resize(int(rawLen))
 	linesBlob := valuesBuf.Bytes()
 	if rawLen > 0 {
 		n, err := lz4lib.UncompressBlock(compressed, linesBlob)
 		if err != nil {
-			valuesBuf.Release()
 			return nil, fmt.Errorf("lz4 uncompress line blob: %w", err)
 		}
 		if n != int(rawLen) {
-			valuesBuf.Release()
 			return nil, fmt.Errorf("lz4 uncompress line blob: got %d bytes, want %d", n, rawLen)
 		}
 	}
 
 	chunkStats.AddDecompressedLines(int64(numEntries))
-	chunkStats.AddDecompressedBytes(int64(tsLen) + int64(llLen) + int64(rawLen))
+	chunkStats.AddDecompressedBytes(int64(len(tsBytes)) + int64(llLen) + int64(rawLen))
 
 	// Same pooling trick for the offsets buffer: allocate it through
 	// arrowAllocator and get a writable []int32 view over its raw bytes
 	// (arrow.Int32Traits.CastFromBytes), instead of a separate unpooled
 	// make([]int32, ...) computed into and then copied out of.
-	offsetsBuf := memory.NewResizableBuffer(arrowAllocator)
+	offsetsBuf = memory.NewResizableBuffer(arrowAllocator)
 	offsetsBuf.Resize((numEntries + 1) * arrow.Int32SizeBytes)
 	lineOffsets := arrow.Int32Traits.CastFromBytes(offsetsBuf.Bytes())
 	// The prefix sum below only ever writes lineOffsets[i+1], relying on
@@ -226,8 +279,19 @@ func decodeColumnarBlockToArrowBatch(ctx context.Context, b []byte, numEntries i
 		lineOffsets[i+1] = lineOffsets[i] + int32(l)
 	}
 
-	structuredMetadata := make([]labels.Labels, numEntries)
-	hasStructuredMetadata := false
+	// POC: collect structured metadata as raw symbol IDs in flat
+	// offsets+names+values slices, instead of eagerly resolving each
+	// row into its own heap-allocated labels.Labels here (symbolizer.
+	// Lookup's RWMutex-guarded cache lookups, OTel name normalization,
+	// and ScratchBuilder.Labels() pack, paid for every row regardless
+	// of whether anything downstream ever reads that row's metadata).
+	// Resolution now happens lazily, via symbolizer.LookupIDs, only
+	// for rows ArrowBatch.get is actually called for - see the design
+	// discussion this is based on and ArrowBatch.SymbolTable's doc
+	// comment. symOffsets mirrors lineOffsets' own prefix-sum shape
+	// just above.
+	symOffsets := make([]int32, numEntries+1)
+	var symNames, symValues []uint32
 	var structuredMetadataBytes int64
 
 	for i := 0; i < numEntries; i++ {
@@ -235,51 +299,58 @@ func decodeColumnarBlockToArrowBatch(ctx context.Context, b []byte, numEntries i
 		if err != nil {
 			return nil, err
 		}
-		// syms is deliberately []symbol, not symbols: assigning a []symbol
-		// pool value into a symbols-typed variable converts it, so a later
-		// Put of that variable would box it back as symbols instead of
-		// []symbol - poisoning the pool for the next Get().([]symbol).
-		var syms []symbol
 		if nSymbols > 0 {
 			structuredMetadataBytes += int64(nSymbols) * 2 * binary.MaxVarintLen64
-			syms = SymbolsPool.Get(int(nSymbols)).([]symbol)[:nSymbols]
-			for j := range syms {
-				name, err := readUvarint()
-				if err != nil {
-					return nil, err
-				}
-				value, err := readUvarint()
-				if err != nil {
-					return nil, err
-				}
-				syms[j] = symbol{Name: uint32(name), Value: uint32(value)}
+		}
+		for j := uint64(0); j < nSymbols; j++ {
+			name, err := readUvarint()
+			if err != nil {
+				return nil, err
 			}
+			value, err := readUvarint()
+			if err != nil {
+				return nil, err
+			}
+			symNames = append(symNames, uint32(name))
+			symValues = append(symValues, uint32(value))
 		}
-		lbls, err := symbolizer.Lookup(symbols(syms), nil)
-		if syms != nil {
-			SymbolsPool.Put(syms)
-		}
-		if err != nil {
-			return nil, fmt.Errorf("symbolizer lookup: %w", err)
-		}
-		structuredMetadata[i] = lbls
-		if !lbls.IsEmpty() {
-			hasStructuredMetadata = true
-		}
+		symOffsets[i+1] = symOffsets[i] + int32(nSymbols)
 	}
 
 	chunkStats.AddDecompressedStructuredMetadataBytes(structuredMetadataBytes)
 	chunkStats.AddDecompressedBytes(structuredMetadataBytes)
 
 	lineColumn := newStringArrayFromBuffers(numEntries, offsetsBuf, valuesBuf)
+	// newStringArrayFromBuffers already released both buffers itself,
+	// transferring ownership to lineColumn's own retained references -
+	// clear them so the deferred cleanup above can't double-release
+	// them if a future change adds an error path below this point.
+	offsetsBuf, valuesBuf = nil, nil
 
 	batch := &log.ArrowBatch{
-		Timestamps: timestamps,
-		LineColumn: lineColumn,
+		Timestamps:    timestamps,
+		TimestampsBuf: timestampsBuf,
+		LineColumn:    lineColumn,
 	}
-	if hasStructuredMetadata {
-		batch.StructuredMetadata = structuredMetadata
+	if len(symNames) > 0 {
+		offB := array.NewInt32Builder(arrowAllocator)
+		offB.AppendValues(symOffsets, nil)
+		batch.StructuredMetadataOffsets = offB.NewInt32Array()
+		offB.Release()
+
+		nameB := array.NewUint32Builder(arrowAllocator)
+		nameB.AppendValues(symNames, nil)
+		batch.StructuredMetadataNames = nameB.NewUint32Array()
+		nameB.Release()
+
+		valB := array.NewUint32Builder(arrowAllocator)
+		valB.AppendValues(symValues, nil)
+		batch.StructuredMetadataValues = valB.NewUint32Array()
+		valB.Release()
+
+		batch.SymbolTable = symbolizer
 	}
+	success = true
 	return batch, nil
 }
 

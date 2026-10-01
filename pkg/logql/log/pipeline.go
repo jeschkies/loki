@@ -365,12 +365,17 @@ func (sp *filteringStreamPipeline) ProcessBatch(b *ArrowBatch) *ArrowBatch {
 	}
 
 	return &ArrowBatch{
-		Timestamps:         b.Timestamps,
-		LineColumn:         b.LineColumn,
-		StructuredMetadata: b.StructuredMetadata,
-		Selection:          newSelection,
-		Lines:              lines,
-		Labels:             results,
+		Timestamps:                b.Timestamps,
+		TimestampsBuf:             b.TimestampsBuf,
+		LineColumn:                b.LineColumn,
+		StructuredMetadata:        b.StructuredMetadata,
+		StructuredMetadataOffsets: b.StructuredMetadataOffsets,
+		StructuredMetadataNames:   b.StructuredMetadataNames,
+		StructuredMetadataValues:  b.StructuredMetadataValues,
+		SymbolTable:               b.SymbolTable,
+		Selection:                 newSelection,
+		Lines:                     lines,
+		Labels:                    results,
 	}
 }
 

@@ -3,13 +3,16 @@ package chunkenc
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"testing"
+	"time"
 
 	"github.com/dustin/go-humanize"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/stretchr/testify/require"
 
 	"github.com/grafana/loki/v3/pkg/compression"
+	"github.com/grafana/loki/v3/pkg/logproto"
 	"github.com/grafana/loki/v3/pkg/logql/log"
 	"github.com/grafana/loki/v3/pkg/logqlmodel/stats"
 )
@@ -123,5 +126,62 @@ func BenchmarkEndToEnd_V5SIMDBatch(b *testing.B) {
 				})
 			}
 		}
+	}
+}
+
+// buildBenchChunkWithStructuredMetadata builds a V5 chunk with
+// structured metadata (2 key/value pairs) on every line - the worst
+// case for ArrowBatch's lazy structured-metadata resolution (see
+// decodeColumnarBlockToArrowBatch/ArrowBatch.get): with no line
+// filter ahead of it and no selectivity to speak of, every row
+// reaches get() and pays the resolution cost, same as the old eager
+// []labels.Labels approach paid at decode time for every row
+// regardless.
+func buildBenchChunkWithStructuredMetadata(tb testing.TB, blockSize int, totalBytes uint64, seed int64) (*MemChunk, uint64) {
+	tb.Helper()
+	r := rand.New(rand.NewSource(seed))
+	c := NewMemChunk(ChunkFormatV5, compression.LZ4_256k, UnorderedWithColumnarHeadBlockFmt, blockSize, 1<<30)
+
+	var size uint64
+	i := int64(0)
+	for size < totalBytes {
+		line := fmt.Sprintf("logline=%d level=info duration=%dms", i, r.Intn(1000))
+		meta := []logproto.LabelAdapter{
+			{Name: "trace_id", Value: fmt.Sprintf("t%d", i)},
+			{Name: "pod", Value: "pod-a"},
+		}
+		entry := &logproto.Entry{Timestamp: time.Unix(0, i), Line: line, StructuredMetadata: meta}
+		if !c.SpaceFor(entry) {
+			break
+		}
+		_, err := c.Append(entry)
+		require.NoError(tb, err)
+		size += uint64(len(line))
+		i++
+	}
+	require.NoError(tb, c.Close())
+	return c, size
+}
+
+// BenchmarkDecodeStructuredMetadata measures decode + full per-row
+// structured-metadata resolution cost (via a no-op pipeline, so every
+// row survives to materializeBatchLabels/get() - no batch-capable
+// stage drops anything first).
+func BenchmarkDecodeStructuredMetadata(b *testing.B) {
+	sizes := []uint64{1 * humanize.MiByte, 4 * humanize.MiByte}
+	pipeline := log.NewPipeline(nil).ForStream(labels.FromStrings("app", "bench"))
+
+	for _, size := range sizes {
+		c, totalBytes := buildBenchChunkWithStructuredMetadata(b, newFormatBlockSize, size, 42)
+		name := fmt.Sprintf("size=%s", humanize.Bytes(size))
+
+		b.Run(name, func(b *testing.B) {
+			_, ctx := stats.NewContext(context.Background())
+			b.ReportAllocs()
+			b.SetBytes(int64(totalBytes))
+			for range b.N {
+				drainNewEntries(ctx, c, pipeline)
+			}
+		})
 	}
 }

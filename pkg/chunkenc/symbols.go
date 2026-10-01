@@ -117,36 +117,68 @@ func (s *symbolizer) Lookup(syms symbols, buf *labels.ScratchBuilder) (labels.La
 		buf.Reset()
 	}
 
-	labelNamer := otlptranslator.LabelNamer{}
 	for _, symbol := range syms {
-		// First check if we have a normalized name for this symbol
-		s.mtx.RLock()
-		normalized, exists := s.normalizedNames[symbol.Name]
-		s.mtx.RUnlock()
-
-		var name string
-		if exists {
-			name = normalized
-		} else {
-			// If we haven't seen this name before, look it up and normalize it
-			name = s.lookup(symbol.Name)
-			// If we have a match for the symbol name, normalize it. Otherwise keep "" as the name.
-			if name != "" {
-				normalized, err := labelNamer.Build(name)
-				if err != nil {
-					return labels.EmptyLabels(), err
-				}
-				s.mtx.Lock()
-				s.normalizedNames[symbol.Name] = normalized
-				s.mtx.Unlock()
-				name = normalized
-			}
+		name, err := s.resolveName(symbol.Name)
+		if err != nil {
+			return labels.EmptyLabels(), err
 		}
-
 		buf.Add(name, s.lookup(symbol.Value))
 	}
 
 	return buf.Labels(), nil
+}
+
+// LookupIDs is Lookup's counterpart for callers holding a row's
+// (name,value) symbol IDs as two parallel slices - e.g. sliced out of
+// Arrow-columnar flat ID arrays - rather than a []symbol. names and
+// values must be the same length. Resolution logic (the
+// normalizedNames cache, OTel label-name normalization) is identical
+// to Lookup's, via the shared resolveName helper.
+func (s *symbolizer) LookupIDs(names, values []uint32) (labels.Labels, error) {
+	if len(names) == 0 {
+		return labels.EmptyLabels(), nil
+	}
+
+	buf := labelpool.Get()
+	defer labelpool.Put(buf)
+
+	for i, nameID := range names {
+		name, err := s.resolveName(nameID)
+		if err != nil {
+			return labels.EmptyLabels(), err
+		}
+		buf.Add(name, s.lookup(values[i]))
+	}
+
+	return buf.Labels(), nil
+}
+
+// resolveName resolves and normalizes the label name for nameID,
+// consulting/populating the normalizedNames cache - shared by Lookup
+// and LookupIDs so both stay consistent.
+func (s *symbolizer) resolveName(nameID uint32) (string, error) {
+	s.mtx.RLock()
+	normalized, exists := s.normalizedNames[nameID]
+	s.mtx.RUnlock()
+	if exists {
+		return normalized, nil
+	}
+
+	// If we haven't seen this name before, look it up and normalize it.
+	name := s.lookup(nameID)
+	if name == "" {
+		// No match for the symbol name - keep "" as the name.
+		return "", nil
+	}
+	labelNamer := otlptranslator.LabelNamer{}
+	normalized, err := labelNamer.Build(name)
+	if err != nil {
+		return "", err
+	}
+	s.mtx.Lock()
+	s.normalizedNames[nameID] = normalized
+	s.mtx.Unlock()
+	return normalized, nil
 }
 
 func (s *symbolizer) lookup(idx uint32) string {

@@ -2,23 +2,59 @@ package log
 
 import (
 	"github.com/apache/arrow-go/v18/arrow/array"
+	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/prometheus/prometheus/model/labels"
 
 	"github.com/grafana/loki/v3/pkg/arrowfilter"
 )
+
+// SymbolTable resolves structured-metadata symbol IDs - as stored in
+// ArrowBatch's StructuredMetadataNames/Values columns - back to the
+// label names/values they represent. Implemented by chunkenc's
+// symbolizer; kept as a narrow interface here so ArrowBatch doesn't
+// need to import chunkenc's on-disk symbolization details, just the
+// resolution capability carried along with the batch's raw ID
+// columns. names and values are parallel, equal-length slices - one
+// entry per (name, value) structured-metadata pair for a single row.
+type SymbolTable interface {
+	LookupIDs(names, values []uint32) (labels.Labels, error)
+}
 
 // ArrowBatch holds a run of log lines from a single stream, to be processed by a
 // StreamPipeline's batch-capable stages before falling back to line-by-line
 // processing for stages that don't support batching.
 //
 // This is proof-of-concept code: it reuses arrow.RecordBatch (via the
-// LineColumn field) rather than a bespoke on-disk encoding, and
-// StructuredMetadata is a plain per-row slice rather than columnar, to keep
-// scope small. See pkg/arrowfilter for the underlying vectorized search.
+// LineColumn field) rather than a bespoke on-disk encoding. See
+// pkg/arrowfilter for the underlying vectorized search.
 type ArrowBatch struct {
 	Timestamps         []int64
 	LineColumn         *array.String   // one row per entry in Timestamps
-	StructuredMetadata []labels.Labels // parallel to Timestamps; entries may be labels.EmptyLabels()
+	StructuredMetadata []labels.Labels // parallel to Timestamps; entries may be labels.EmptyLabels(). Unused when SymbolTable is set - see StructuredMetadataOffsets.
+
+	// TimestampsBuf is Timestamps' backing storage, when Timestamps is a
+	// zero-copy view over a pooled allocator buffer (see
+	// decodeColumnarBlockToArrowBatch) rather than a plain make()'d slice -
+	// nil otherwise. Released alongside LineColumn in Release.
+	TimestampsBuf *memory.Buffer
+
+	// StructuredMetadataOffsets/Names/Values represent structured
+	// metadata as raw symbol IDs in real, pooled Arrow columns, instead
+	// of eagerly resolving each row into its own heap-allocated
+	// labels.Labels during decode (see decodeColumnarBlockToArrowBatch
+	// and the design discussion this is based on). For row i,
+	// StructuredMetadataOffsets.Value(i):StructuredMetadataOffsets.Value(i+1)
+	// indexes into the flat Names/Values columns for that row's
+	// (name,value) symbol-ID pairs - same offsets+flat-values shape
+	// LineColumn itself already uses. Resolution happens lazily, in
+	// get(), via SymbolTable, only for rows that reach it. nil (with
+	// SymbolTable nil too) when the batch came from a decode path that
+	// hasn't been switched over yet - get() falls back to
+	// StructuredMetadata in that case.
+	StructuredMetadataOffsets *array.Int32
+	StructuredMetadataNames   *array.Uint32
+	StructuredMetadataValues  *array.Uint32
+	SymbolTable               SymbolTable
 
 	// Selection lists the indices of rows still under consideration, in
 	// ascending order. A nil Selection means all rows are selected.
@@ -56,6 +92,18 @@ func (b *ArrowBatch) Release() {
 	if b.LineColumn != nil {
 		b.LineColumn.Release()
 	}
+	if b.TimestampsBuf != nil {
+		b.TimestampsBuf.Release()
+	}
+	if b.StructuredMetadataOffsets != nil {
+		b.StructuredMetadataOffsets.Release()
+	}
+	if b.StructuredMetadataNames != nil {
+		b.StructuredMetadataNames.Release()
+	}
+	if b.StructuredMetadataValues != nil {
+		b.StructuredMetadataValues.Release()
+	}
 	arrowfilter.PutSelection(b.Selection)
 	b.Selection = nil
 }
@@ -76,18 +124,51 @@ func (b *ArrowBatch) rows() []int32 {
 // withSelection returns a copy of b with its Selection narrowed to sel.
 func (b *ArrowBatch) withSelection(sel []int32) *ArrowBatch {
 	return &ArrowBatch{
-		Timestamps:         b.Timestamps,
-		LineColumn:         b.LineColumn,
-		StructuredMetadata: b.StructuredMetadata,
-		Selection:          sel,
+		Timestamps:                b.Timestamps,
+		TimestampsBuf:             b.TimestampsBuf,
+		LineColumn:                b.LineColumn,
+		StructuredMetadata:        b.StructuredMetadata,
+		StructuredMetadataOffsets: b.StructuredMetadataOffsets,
+		StructuredMetadataNames:   b.StructuredMetadataNames,
+		StructuredMetadataValues:  b.StructuredMetadataValues,
+		SymbolTable:               b.SymbolTable,
+		Selection:                 sel,
 	}
 }
 
 // get returns the original (unmutated) timestamp, line, and structured
 // metadata for row, by absolute row index into LineColumn/Timestamps.
+//
+// Structured metadata resolution happens here, lazily, when b came
+// from a decode path populating the raw-symbol-ID columns
+// (SymbolTable != nil): only rows get() is actually called for pay the
+// resolution cost, instead of every row in the batch paying it eagerly
+// at decode time. Falls back to the pre-resolved StructuredMetadata
+// slice for decode paths that haven't been switched over to the
+// columnar representation.
+//
+// POC caveat: get() has no error return, so a LookupIDs failure here
+// silently falls back to EmptyLabels() for that row instead of
+// aborting the whole decode the way the eager path's "symbolizer
+// lookup: %w" error does today. Acceptable for this POC (LookupIDs
+// only errors on a malformed otel label-name translation, essentially
+// never hit in practice), but worth revisiting - likely by having
+// get() propagate an error - before this goes beyond proof-of-concept.
 func (b *ArrowBatch) get(row int32) (ts int64, line []byte, sm labels.Labels) {
 	sm = labels.EmptyLabels()
-	if b.StructuredMetadata != nil {
+	switch {
+	case b.SymbolTable != nil:
+		offsets := b.StructuredMetadataOffsets.Int32Values()
+		start, end := offsets[row], offsets[row+1]
+		if start != end {
+			names := b.StructuredMetadataNames.Uint32Values()[start:end]
+			values := b.StructuredMetadataValues.Uint32Values()[start:end]
+			resolved, err := b.SymbolTable.LookupIDs(names, values)
+			if err == nil {
+				sm = resolved
+			}
+		}
+	case b.StructuredMetadata != nil:
 		sm = b.StructuredMetadata[row]
 	}
 	return b.Timestamps[row], unsafeGetBytes(b.LineColumn.Value(int(row))), sm
@@ -177,12 +258,17 @@ func runRemainingStagesPerRow(stages []Stage, b *ArrowBatch, lbs *LabelsBuilder)
 	}
 
 	return &ArrowBatch{
-		Timestamps:         b.Timestamps,
-		LineColumn:         b.LineColumn,
-		StructuredMetadata: b.StructuredMetadata,
-		Selection:          newSelection,
-		Lines:              lines,
-		Labels:             results,
+		Timestamps:                b.Timestamps,
+		TimestampsBuf:             b.TimestampsBuf,
+		LineColumn:                b.LineColumn,
+		StructuredMetadata:        b.StructuredMetadata,
+		StructuredMetadataOffsets: b.StructuredMetadataOffsets,
+		StructuredMetadataNames:   b.StructuredMetadataNames,
+		StructuredMetadataValues:  b.StructuredMetadataValues,
+		SymbolTable:               b.SymbolTable,
+		Selection:                 newSelection,
+		Lines:                     lines,
+		Labels:                    results,
 	}
 }
 
@@ -225,11 +311,16 @@ func runRemainingStagesAndExtractPerRow(stages []Stage, b *ArrowBatch, lbs *Labe
 	}
 
 	return &ArrowBatch{
-		Timestamps:         b.Timestamps,
-		LineColumn:         b.LineColumn,
-		StructuredMetadata: b.StructuredMetadata,
-		Selection:          newSelection,
-		Labels:             results,
+		Timestamps:                b.Timestamps,
+		TimestampsBuf:             b.TimestampsBuf,
+		LineColumn:                b.LineColumn,
+		StructuredMetadata:        b.StructuredMetadata,
+		StructuredMetadataOffsets: b.StructuredMetadataOffsets,
+		StructuredMetadataNames:   b.StructuredMetadataNames,
+		StructuredMetadataValues:  b.StructuredMetadataValues,
+		SymbolTable:               b.SymbolTable,
+		Selection:                 newSelection,
+		Labels:                    results,
 	}, values
 }
 
@@ -256,12 +347,17 @@ func materializeBatchLabels(b *ArrowBatch, lbs *LabelsBuilder, labelsFn func(*La
 	}
 
 	return &ArrowBatch{
-		Timestamps:         b.Timestamps,
-		LineColumn:         b.LineColumn,
-		StructuredMetadata: b.StructuredMetadata,
-		Selection:          rows,
-		Lines:              lines,
-		Labels:             results,
+		Timestamps:                b.Timestamps,
+		TimestampsBuf:             b.TimestampsBuf,
+		LineColumn:                b.LineColumn,
+		StructuredMetadata:        b.StructuredMetadata,
+		StructuredMetadataOffsets: b.StructuredMetadataOffsets,
+		StructuredMetadataNames:   b.StructuredMetadataNames,
+		StructuredMetadataValues:  b.StructuredMetadataValues,
+		SymbolTable:               b.SymbolTable,
+		Selection:                 rows,
+		Lines:                     lines,
+		Labels:                    results,
 	}
 }
 
@@ -289,11 +385,16 @@ func processBatchFallback(sp StreamSampleExtractor, b *ArrowBatch) (*ArrowBatch,
 	}
 
 	return &ArrowBatch{
-		Timestamps:         b.Timestamps,
-		LineColumn:         b.LineColumn,
-		StructuredMetadata: b.StructuredMetadata,
-		Selection:          newSelection,
-		Labels:             results,
+		Timestamps:                b.Timestamps,
+		TimestampsBuf:             b.TimestampsBuf,
+		LineColumn:                b.LineColumn,
+		StructuredMetadata:        b.StructuredMetadata,
+		StructuredMetadataOffsets: b.StructuredMetadataOffsets,
+		StructuredMetadataNames:   b.StructuredMetadataNames,
+		StructuredMetadataValues:  b.StructuredMetadataValues,
+		SymbolTable:               b.SymbolTable,
+		Selection:                 newSelection,
+		Labels:                    results,
 	}, values
 }
 

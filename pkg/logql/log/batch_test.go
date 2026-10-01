@@ -111,6 +111,70 @@ func TestArrowBatch_MatchesLineByLine(t *testing.T) {
 	}, got)
 }
 
+// fakeSymbolTable is a SymbolTable test double: deterministic,
+// independent of any real symbolizer, so TestArrowBatch_Get_* can
+// check exactly which names/values slice get() sliced out for a given
+// row without needing a real chunkenc.symbolizer.
+type fakeSymbolTable struct{}
+
+func (fakeSymbolTable) LookupIDs(names, values []uint32) (labels.Labels, error) {
+	b := labels.NewScratchBuilder(len(names))
+	for i := range names {
+		b.Add(fmt.Sprintf("name%d", names[i]), fmt.Sprintf("value%d", values[i]))
+	}
+	b.Sort()
+	return b.Labels(), nil
+}
+
+// TestArrowBatch_Get_StructuredMetadataColumns verifies ArrowBatch.get
+// resolves structured metadata correctly from the raw-symbol-ID
+// columns (StructuredMetadataOffsets/Names/Values + SymbolTable),
+// including a row with zero symbol pairs and a row with more than
+// one - the offsets-based slicing this depends on.
+func TestArrowBatch_Get_StructuredMetadataColumns(t *testing.T) {
+	// row 0: no structured metadata.
+	// row 1: one pair (name=10, value=20).
+	// row 2: two pairs (name=10,value=20), (name=11,value=21).
+	offB := array.NewInt32Builder(memory.DefaultAllocator)
+	offB.AppendValues([]int32{0, 0, 1, 3}, nil)
+	offsets := offB.NewInt32Array()
+	t.Cleanup(offsets.Release)
+
+	nameB := array.NewUint32Builder(memory.DefaultAllocator)
+	nameB.AppendValues([]uint32{10, 10, 11}, nil)
+	names := nameB.NewUint32Array()
+	t.Cleanup(names.Release)
+
+	valB := array.NewUint32Builder(memory.DefaultAllocator)
+	valB.AppendValues([]uint32{20, 20, 21}, nil)
+	values := valB.NewUint32Array()
+	t.Cleanup(values.Release)
+
+	b := buildArrowBatch(t, []string{"a", "b", "c"})
+	b.StructuredMetadataOffsets = offsets
+	b.StructuredMetadataNames = names
+	b.StructuredMetadataValues = values
+	b.SymbolTable = fakeSymbolTable{}
+
+	_, _, sm0 := b.get(0)
+	require.True(t, sm0.IsEmpty(), "row 0 should have no structured metadata")
+
+	_, _, sm1 := b.get(1)
+	require.Equal(t, labels.FromStrings("name10", "value20"), sm1)
+
+	_, _, sm2 := b.get(2)
+	require.Equal(t, labels.FromStrings("name10", "value20", "name11", "value21"), sm2)
+}
+
+// TestArrowBatch_Get_NoStructuredMetadata verifies get() falls back to
+// EmptyLabels() when a batch has neither the raw-symbol-ID columns
+// nor the older StructuredMetadata slice set.
+func TestArrowBatch_Get_NoStructuredMetadata(t *testing.T) {
+	b := buildArrowBatch(t, []string{"a"})
+	_, _, sm := b.get(0)
+	require.True(t, sm.IsEmpty())
+}
+
 // TestArrowBatch_FallsBackForLabelStage verifies that a chain mixing a
 // batch-capable line filter with a label-mutating stage (which has no
 // BatchProcessor support) still produces correct results end-to-end.

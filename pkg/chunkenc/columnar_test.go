@@ -195,3 +195,57 @@ func TestChunkFormatV5_FilterStage(t *testing.T) {
 	require.NoError(t, it.Err())
 	require.Equal(t, 3000/7+1, n)
 }
+
+// TestChunkFormatV5_DecodeTruncatedBlock exercises
+// decodeColumnarBlockToArrowBatch's error paths directly: a block
+// truncated at any byte offset must return an error, never panic - in
+// particular, it must not double-release any of timestampsBuf/
+// valuesBuf/offsetsBuf through the deferred cleanup that returns them
+// to arrowBufferPool on an early return (see the comment on that defer
+// in columnar.go). Truncating at every offset sweeps through failing
+// at each of readUvarint's several call sites in turn, after a
+// different subset of those buffers has already been allocated.
+func TestChunkFormatV5_DecodeTruncatedBlock(t *testing.T) {
+	timestamps := make([]int64, 50)
+	lines := make([]string, 50)
+	symbolsPerEntry := make([]symbols, 50)
+	sym := newSymbolizer()
+	for i := range timestamps {
+		timestamps[i] = int64(i)
+		lines[i] = fmt.Sprintf("logline=%d level=info duration=%dms", i, i*7%1000)
+		syms, err := sym.Add(labels.FromStrings("trace_id", fmt.Sprintf("t%d", i)))
+		require.NoError(t, err)
+		symbolsPerEntry[i] = syms
+	}
+
+	full, err := encodeColumnarBlock(timestamps, lines, symbolsPerEntry)
+	require.NoError(t, err)
+	require.NotEmpty(t, full)
+
+	for n := 0; n < len(full); n++ {
+		// full[:n] alone would only shorten len, not cap - leaving
+		// enough headroom in the shared backing array that a 2-index
+		// slice past n (but still within cap(full)) wouldn't bounds-
+		// check the way it would against genuinely short/truncated
+		// data read from disk. append([]byte(nil), ...) isn't enough
+		// either: growslice can round the new capacity up past n.
+		// make+copy is the only way to guarantee cap == len == n, so
+		// every slice operation inside decode sees exactly n bytes
+		// available, matching a real truncated read.
+		truncated := make([]byte, n)
+		copy(truncated, full[:n])
+		require.NotPanics(t, func() {
+			_, err := decodeColumnarBlockToArrowBatch(context.Background(), truncated, len(timestamps), sym)
+			require.Error(t, err, "truncated to %d/%d bytes", n, len(full))
+		}, "truncated to %d/%d bytes", n, len(full))
+	}
+
+	// The untruncated block must still decode cleanly - sweeping
+	// truncation points shouldn't leave arrowBufferPool (shared,
+	// package-level state) in a state that corrupts a subsequent,
+	// valid decode.
+	batch, err := decodeColumnarBlockToArrowBatch(context.Background(), full, len(timestamps), sym)
+	require.NoError(t, err)
+	require.Equal(t, len(timestamps), batch.NumRows())
+	batch.Release()
+}

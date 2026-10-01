@@ -332,3 +332,43 @@ func TestSymbolizerLabelNormalizationSameNameValue(t *testing.T) {
 	require.False(t, result.Has("foo-bar"), "metric should not contain unnormalized label")
 	require.False(t, result.Has("test-label"), "metric should not contain unnormalized label")
 }
+
+// TestSymbolizer_LookupIDsAgreesWithLookup pins LookupIDs (parallel
+// []uint32 name/value slices, as sliced from Arrow-columnar flat ID
+// arrays - see ArrowBatch.get) to produce exactly the same result
+// Lookup (the []symbol-based original) would, including the
+// label-name-normalization path both share via resolveName.
+func TestSymbolizer_LookupIDsAgreesWithLookup(t *testing.T) {
+	s := newSymbolizer()
+
+	cases := []labels.Labels{
+		labels.EmptyLabels(),
+		labels.FromStrings("trace_id", "abc123"),
+		labels.FromStrings("trace_id", "abc123", "pod", "pod-a", "namespace", "ns-a"),
+		labels.New( // names needing OTel normalization, like TestSymbolizerLabelNormalization
+			labels.Label{Name: "foo-bar", Value: "foo-bar"},
+			labels.Label{Name: "test-label", Value: "test-label"},
+		),
+	}
+
+	for _, lbls := range cases {
+		t.Run(lbls.String(), func(t *testing.T) {
+			syms, err := s.Add(lbls)
+			require.NoError(t, err)
+
+			want, err := s.Lookup(syms, nil)
+			require.NoError(t, err)
+
+			names := make([]uint32, len(syms))
+			values := make([]uint32, len(syms))
+			for i, sym := range syms {
+				names[i] = sym.Name
+				values[i] = sym.Value
+			}
+			got, err := s.LookupIDs(names, values)
+			require.NoError(t, err)
+
+			require.Equal(t, want, got)
+		})
+	}
+}
