@@ -22,11 +22,13 @@ import (
 // all rows; tier 2: Hi compare or out-of-line verify, only for
 // survivors) - the structure a future SIMD batch compare would plug into.
 type PackedStringView struct {
-	headers   []PackedHeader
-	los       []uint64 // headers[i].Lo, kept contiguous for matchLo's batch scan
-	headerBuf *memory.Buffer
-	validity  []byte // null bitmap, 1 bit per row, LSB-first; nil means "all valid"
-	buffer    *memory.Buffer
+	headers     []PackedHeader
+	los         []uint64 // headers[i].Lo, kept contiguous for matchLo's batch scan
+	headerBuf   *memory.Buffer
+	losBuf      *memory.Buffer
+	validity    []byte // null bitmap, 1 bit per row, LSB-first; nil means "all valid"
+	validityBuf *memory.Buffer
+	buffer      *memory.Buffer
 }
 
 // Len returns the number of rows.
@@ -62,6 +64,14 @@ func (v *PackedStringView) Release() {
 	if v.headerBuf != nil {
 		v.headerBuf.Release()
 		v.headerBuf = nil
+	}
+	if v.losBuf != nil {
+		v.losBuf.Release()
+		v.losBuf = nil
+	}
+	if v.validityBuf != nil {
+		v.validityBuf.Release()
+		v.validityBuf = nil
 	}
 	if v.buffer != nil {
 		v.buffer.Release()
@@ -106,9 +116,24 @@ func BuildPackedStringView(mem memory.Allocator, lines *array.String, key []byte
 	headerBuf := memory.NewResizableBuffer(mem)
 	headerBuf.Resize(m * 16)
 	headers := unsafe.Slice((*PackedHeader)(unsafe.Pointer(&headerBuf.Bytes()[0])), m)
-	los := make([]uint64, m)
 
-	validity := make([]byte, (m+7)/8)
+	losBuf := memory.NewResizableBuffer(mem)
+	losBuf.Resize(m * 8)
+	los := unsafe.Slice((*uint64)(unsafe.Pointer(&losBuf.Bytes()[0])), m)
+
+	validityBuf := memory.NewResizableBuffer(mem)
+	validityBuf.Resize((m + 7) / 8)
+	validity := validityBuf.Bytes()
+	// Unlike make(), a buffer pulled from a pooled allocator isn't
+	// zero-initialized - it can carry stale 1-bits from whatever a
+	// previous call left in this same memory. validity is the only
+	// authoritative source of null-ness, so it must be zeroed
+	// explicitly; headers/los don't need this (every consumer already
+	// checks IsNull before trusting a row's content, so stale garbage
+	// there for null rows is harmless).
+	for i := range validity {
+		validity[i] = 0
+	}
 
 	lineValues := lines.Data().Buffers()[2]
 	offsets := lines.ValueOffsets()
@@ -142,11 +167,13 @@ func BuildPackedStringView(mem memory.Allocator, lines *array.String, key []byte
 	}
 
 	return &PackedStringView{
-		headers:   headers,
-		los:       los,
-		headerBuf: headerBuf,
-		validity:  validity,
-		buffer:    lineValues,
+		headers:     headers,
+		los:         los,
+		headerBuf:   headerBuf,
+		losBuf:      losBuf,
+		validity:    validity,
+		validityBuf: validityBuf,
+		buffer:      lineValues,
 	}
 }
 
