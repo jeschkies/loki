@@ -362,6 +362,56 @@ func sortLabelSlice(l []labels.Label) {
 	})
 }
 
+// TestHashSorted_MatchesStableHash pins hasher.HashSorted (used by
+// LabelsResult/toUncategorizedResult to hash before paying for
+// labels.New's packed-string encoding) to produce exactly the hash
+// labels.StableHash(labels.New(buf...)) would - including the 1KB+
+// Write-API fallback path both implementations share. A future vendor
+// bump that changes StableHash's internal separator byte would only be
+// caught here, not by the compiler - see the comment on hashSep in
+// labels_stringlabels.go.
+func TestHashSorted_MatchesStableHash(t *testing.T) {
+	h := newHasher()
+
+	cases := map[string][]labels.Label{
+		"empty": {},
+		"single": {
+			{Name: "level", Value: "info"},
+		},
+		"typical": {
+			{Name: "namespace", Value: "loki"},
+			{Name: "job", Value: "us-central1/loki"},
+			{Name: "cluster", Value: "us-central1"},
+			{Name: "level", Value: "info"},
+		},
+		"empty values": {
+			{Name: "foo", Value: ""},
+			{Name: "bar", Value: ""},
+		},
+		"non-ascii": {
+			{Name: "msg", Value: "héllo wörld"},
+			{Name: "lang", Value: "日本語"},
+		},
+	}
+
+	// Exercise the xxhash.New()/Write-API fallback both HashSorted and
+	// StableHash switch to once the buffer would exceed 1KB.
+	big := make([]labels.Label, 50)
+	for i := range big {
+		big[i] = labels.Label{Name: fmt.Sprintf("label_%02d", i), Value: strings.Repeat("v", 30)}
+	}
+	cases["1KB+ fallback"] = big
+
+	for name, buf := range cases {
+		t.Run(name, func(t *testing.T) {
+			sortLabelSlice(buf)
+			want := labels.StableHash(labels.New(buf...))
+			got := h.HashSorted(buf)
+			require.Equal(t, want, got)
+		})
+	}
+}
+
 func TestLabelsBuilder_GroupedLabelsResult(t *testing.T) {
 	strs := []string{"namespace", "loki",
 		"job", "us-central1/loki",
@@ -495,6 +545,34 @@ func BenchmarkStreamLineSampleExtractor_Process(b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		_, _ = streamEx.Process(time.Now().UnixNano(), testLine, structuredMeta)
+	}
+}
+
+// BenchmarkLabelsBuilder_LabelsResult_CacheHit simulates
+// MaterializePackedValueForRow/MaterializeLogfmtValueForRow's own loop
+// shape: Reset, Set a handful of parsed labels, then LabelsResult - run
+// repeatedly with the SAME label set, so every call after the first is
+// a resultCache hit (Reset doesn't clear resultCache). This is the
+// scenario LabelsResult's "hash before building" reordering targets:
+// at a selectivity=1.0 count_over_time over a label with few distinct
+// values (e.g. level="info"), nearly every row's materialization is a
+// cache hit, and used to still pay for labels.New's packed-string
+// encoding on every single one just to look the cache up.
+func BenchmarkLabelsBuilder_LabelsResult_CacheHit(b *testing.B) {
+	for _, n := range []int{1, 4, 16} {
+		b.Run(fmt.Sprintf("parsedLabels=%d", n), func(b *testing.B) {
+			base := labels.FromStrings("app", "bench", "namespace", "loki")
+			builder := NewBaseLabelsBuilder().ForLabels(base, labels.StableHash(base))
+
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				builder.Reset()
+				for j := 0; j < n; j++ {
+					builder.Set(ParsedLabel, fmt.Sprintf("key_%d", j), "info")
+				}
+				_ = builder.LabelsResult()
+			}
+		})
 	}
 }
 

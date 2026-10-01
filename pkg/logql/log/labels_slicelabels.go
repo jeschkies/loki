@@ -22,3 +22,13 @@ func (h *hasher) Hash(lbs labels.Labels) uint64 {
 	hash, h.buf = lbs.HashWithoutLabels(h.buf, []string(nil)...)
 	return hash
 }
+
+// HashSorted computes the same hash Hash(labels.New(buf...)) would,
+// directly from buf - which must already be sorted by Name, matching
+// what labels.New's own sort would produce. Under slicelabels,
+// labels.Labels is defined as []Label, so this cast is zero-cost -
+// unlike the stringlabels build, there's no packed encoding to defer
+// here in the first place.
+func (h *hasher) HashSorted(buf []labels.Label) uint64 {
+	return h.Hash(labels.Labels(buf))
+}
