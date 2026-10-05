@@ -288,6 +288,13 @@ func (p *stubStreamPipeline) ReferencedStructuredMetadata() bool {
 	return false
 }
 
+func (p *stubStreamPipeline) ProcessBatch(b *ArrowBatch) *ArrowBatch {
+	return processLineByLine(b, func(ts int64, line []byte, structuredMetadata labels.Labels) (string, LabelsResult, bool) {
+		resultLine, resultLabels, matches := p.Process(ts, line, structuredMetadata)
+		return unsafeGetString(resultLine), resultLabels, matches
+	})
+}
+
 var (
 	resMatches    bool
 	resLine       []byte

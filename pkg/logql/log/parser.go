@@ -253,6 +253,10 @@ func (j *JSONParser) buildJSONPathFromPrefixBuffer() []string {
 	return jsonPath
 }
 
+func (j *JSONParser) ProcessBatch(b *ArrowBatch) *ArrowBatch {
+	return processStageLineByLine(b, j.Process)
+}
+
 // Hints implements Stage.
 func (j *JSONParser) Hints() StageHints {
 	return StageHints{CanModifyLabels: true}
@@ -367,6 +371,10 @@ func (r *RegexpParser) Process(_ int64, line []byte, lbs *LabelsBuilder) ([]byte
 	return line, true
 }
 
+func (r *RegexpParser) ProcessBatch(b *ArrowBatch) *ArrowBatch {
+	return processStageLineByLine(b, r.Process)
+}
+
 // Hints implements Stage.
 func (r *RegexpParser) Hints() StageHints {
 	return StageHints{CanModifyLabels: true}
@@ -462,6 +470,10 @@ func (l *LogfmtParser) Process(_ int64, line []byte, lbs *LabelsBuilder) ([]byte
 	return line, true
 }
 
+func (l *LogfmtParser) ProcessBatch(b *ArrowBatch) *ArrowBatch {
+	return processStageLineByLine(b, l.Process)
+}
+
 // Hints implements Stage.
 func (l *LogfmtParser) Hints() StageHints {
 	return StageHints{CanModifyLabels: true}
@@ -513,6 +525,10 @@ func (l *PatternParser) Process(_ int64, line []byte, lbs *LabelsBuilder) ([]byt
 		}
 	}
 	return line, true
+}
+
+func (l *PatternParser) ProcessBatch(b *ArrowBatch) *ArrowBatch {
+	return processStageLineByLine(b, l.Process)
 }
 
 // Hints implements Stage.
@@ -649,6 +665,10 @@ func (l *LogfmtExpressionParser) Process(_ int64, line []byte, lbs *LabelsBuilde
 	return line, true
 }
 
+func (l *LogfmtExpressionParser) ProcessBatch(b *ArrowBatch) *ArrowBatch {
+	return processStageLineByLine(b, l.Process)
+}
+
 // Hints implements Stage.
 func (l *LogfmtExpressionParser) Hints() StageHints {
 	return StageHints{CanModifyLabels: true}
@@ -761,6 +781,10 @@ func isValidJSONStart(data []byte) bool {
 	}
 }
 
+func (j *JSONExpressionParser) ProcessBatch(b *ArrowBatch) *ArrowBatch {
+	return processStageLineByLine(b, j.Process)
+}
+
 // Hints implements Stage.
 func (j *JSONExpressionParser) Hints() StageHints {
 	return StageHints{CanModifyLabels: true}
@@ -813,6 +837,10 @@ func (u *UnpackParser) Process(_ int64, line []byte, lbs *LabelsBuilder) ([]byte
 	}
 
 	return entry, true
+}
+
+func (u *UnpackParser) ProcessBatch(b *ArrowBatch) *ArrowBatch {
+	return processStageLineByLine(b, u.Process)
 }
 
 func addErrLabel(msg string, err error, lbs *LabelsBuilder) {

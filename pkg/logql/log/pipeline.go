@@ -24,6 +24,7 @@ type StreamPipeline interface {
 	// The buffer returned for the log line can be reused on subsequent calls to Process and therefore must be copied.
 	Process(ts int64, line []byte, structuredMetadata labels.Labels) (resultLine []byte, resultLabels LabelsResult, matches bool)
 	ProcessString(ts int64, line string, structuredMetadata labels.Labels) (resultLine string, resultLabels LabelsResult, matches bool)
+	ProcessBatch(b *ArrowBatch) *ArrowBatch
 	ReferencedStructuredMetadata() bool
 }
 
@@ -36,6 +37,7 @@ type Stage interface {
 	// resulting line and whether the line passes the stage. A false result means the line is filtered
 	// out, and the returned line is then unspecified.
 	Process(ts int64, line []byte, lbs *LabelsBuilder) ([]byte, bool)
+	ProcessBatch(b *ArrowBatch) *ArrowBatch
 
 	RequiredLabelNames() []string
 
@@ -124,12 +126,23 @@ func (n noopStreamPipeline) ProcessString(ts int64, line string, structuredMetad
 	return line, lr, ok
 }
 
+func (n noopStreamPipeline) ProcessBatch(b *ArrowBatch) *ArrowBatch {
+	return processLineByLine(b, func(ts int64, line []byte, structuredMetadata labels.Labels) (string, LabelsResult, bool) {
+		resultLine, resultLabels, matches := n.Process(ts, line, structuredMetadata)
+		return unsafeGetString(resultLine), resultLabels, matches
+	})
+}
+
 func (n noopStreamPipeline) BaseLabels() LabelsResult { return n.builder.currentResult }
 
 type noopStage struct{}
 
 func (noopStage) Process(_ int64, line []byte, _ *LabelsBuilder) ([]byte, bool) {
 	return line, true
+}
+
+func (n noopStage) ProcessBatch(b *ArrowBatch) *ArrowBatch {
+	return processStageLineByLine(b, n.Process)
 }
 
 // Hints implements Stage.
@@ -157,6 +170,10 @@ func NewStageFunc(requiredLabels []string, hints StageHints, process func(ts int
 
 func (fn StageFunc) Process(ts int64, line []byte, lbs *LabelsBuilder) ([]byte, bool) {
 	return fn.process(ts, line, lbs)
+}
+
+func (fn StageFunc) ProcessBatch(b *ArrowBatch) *ArrowBatch {
+	return processStageLineByLine(b, fn.Process)
 }
 
 // Hints implements Stage.
@@ -263,6 +280,14 @@ func (p *streamPipeline) ProcessString(ts int64, line string, structuredMetadata
 	lb, lr, ok := p.Process(ts, unsafeGetBytes(line), structuredMetadata)
 	// but the returned line needs to be copied.
 	return string(lb), lr, ok
+}
+
+func (p *streamPipeline) ProcessBatch(b *ArrowBatch) *ArrowBatch {
+	tmp := b
+	for _, s := range p.stages {
+		tmp = s.ProcessBatch(tmp)
+	}
+	return tmp
 }
 
 func (p *streamPipeline) BaseLabels() LabelsResult { return p.builder.currentResult }
@@ -373,6 +398,13 @@ func (sp *filteringStreamPipeline) ProcessString(ts int64, line string, structur
 	return sp.pipeline.ProcessString(ts, line, structuredMetadata)
 }
 
+func (sp *filteringStreamPipeline) ProcessBatch(b *ArrowBatch) *ArrowBatch {
+	return processLineByLine(b, func(ts int64, line []byte, structuredMetadata labels.Labels) (string, LabelsResult, bool) {
+		resultLine, resultLabels, matches := sp.Process(ts, line, structuredMetadata)
+		return unsafeGetString(resultLine), resultLabels, matches
+	})
+}
+
 // ReduceStages reduces multiple stages into one.
 func ReduceStages(stages []Stage) Stage {
 	if len(stages) == 0 {
@@ -401,5 +433,5 @@ func unsafeGetBytes(s string) []byte {
 }
 
 func unsafeGetString(buf []byte) string {
-	return *((*string)(unsafe.Pointer(&buf))) // #nosec G103 -- we know the string is not mutated -- nosemgrep: use-of-unsafe-block
+	return *(*string)(unsafe.Pointer(&buf)) // #nosec G103 -- we know the string is not mutated -- nosemgrep: use-of-unsafe-block
 }

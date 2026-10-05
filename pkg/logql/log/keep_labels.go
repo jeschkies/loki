@@ -44,6 +44,10 @@ func (kl *KeepLabels) Process(_ int64, line []byte, lbls *LabelsBuilder) ([]byte
 	return line, true
 }
 
+func (kl *KeepLabels) ProcessBatch(b *ArrowBatch) *ArrowBatch {
+	return processStageLineByLine(b, kl.Process)
+}
+
 // Hints implements Stage.
 func (kl *KeepLabels) Hints() StageHints {
 	return StageHints{CanModifyLabels: true}

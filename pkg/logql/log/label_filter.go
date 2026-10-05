@@ -99,6 +99,10 @@ func (b *BinaryLabelFilter) Process(ts int64, line []byte, lbs *LabelsBuilder) (
 	return line, lok && rok
 }
 
+func (b *BinaryLabelFilter) ProcessBatch(batch *ArrowBatch) *ArrowBatch {
+	return processStageLineByLine(batch, b.Process)
+}
+
 // Hints implements Stage.
 func (b *BinaryLabelFilter) Hints() StageHints {
 	// It runs both child filters, so it can change the output labels when either child can.
@@ -134,6 +138,10 @@ type NoopLabelFilter struct {
 
 func (NoopLabelFilter) Process(_ int64, line []byte, _ *LabelsBuilder) ([]byte, bool) {
 	return line, true
+}
+
+func (n NoopLabelFilter) ProcessBatch(b *ArrowBatch) *ArrowBatch {
+	return processStageLineByLine(b, n.Process)
 }
 
 // Hints implements Stage.
@@ -220,6 +228,10 @@ func (d *BytesLabelFilter) Process(_ int64, line []byte, lbs *LabelsBuilder) ([]
 	}
 }
 
+func (d *BytesLabelFilter) ProcessBatch(b *ArrowBatch) *ArrowBatch {
+	return processStageLineByLine(b, d.Process)
+}
+
 // Hints implements Stage.
 func (d *BytesLabelFilter) Hints() StageHints {
 	// It sets __error__ when the label value does not parse as bytes, which changes the output labels.
@@ -294,6 +306,10 @@ func (d *DurationLabelFilter) Process(_ int64, line []byte, lbs *LabelsBuilder) 
 	}
 }
 
+func (d *DurationLabelFilter) ProcessBatch(b *ArrowBatch) *ArrowBatch {
+	return processStageLineByLine(b, d.Process)
+}
+
 // Hints implements Stage.
 func (d *DurationLabelFilter) Hints() StageHints {
 	// It sets __error__ when the label value does not parse as a duration, which changes the output labels.
@@ -360,7 +376,10 @@ func (n *NumericLabelFilter) Process(_ int64, line []byte, lbs *LabelsBuilder) (
 		}
 		return line, true
 	}
+}
 
+func (n *NumericLabelFilter) ProcessBatch(b *ArrowBatch) *ArrowBatch {
+	return processStageLineByLine(b, n.Process)
 }
 
 // Hints implements Stage.
@@ -406,6 +425,10 @@ func (s *StringLabelFilter) Process(_ int64, line []byte, lbs *LabelsBuilder) ([
 	return line, s.Matches(labelValue(s.Name, lbs))
 }
 
+func (s *StringLabelFilter) ProcessBatch(b *ArrowBatch) *ArrowBatch {
+	return processStageLineByLine(b, s.Process)
+}
+
 // Hints implements Stage.
 func (s *StringLabelFilter) Hints() StageHints {
 	// It only reads a label value to decide the match, never writing a label.
@@ -442,6 +465,10 @@ func (s *LineFilterLabelFilter) String() string {
 func (s *LineFilterLabelFilter) Process(_ int64, line []byte, lbs *LabelsBuilder) ([]byte, bool) {
 	v := labelValue(s.Name, lbs)
 	return line, s.Filter.Filter(unsafeGetBytes(v))
+}
+
+func (s *LineFilterLabelFilter) ProcessBatch(b *ArrowBatch) *ArrowBatch {
+	return processStageLineByLine(b, s.Process)
 }
 
 // Hints implements Stage.

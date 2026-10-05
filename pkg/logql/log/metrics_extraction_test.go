@@ -580,6 +580,10 @@ func (p *stubStreamExtractor) ReferencedStructuredMetadata() bool {
 	return false
 }
 
+func (p *stubStreamExtractor) ProcessBatch(b *ArrowBatch) *ArrowBatch {
+	return processSampleLineByLine(b, p.Process)
+}
+
 func TestLineSampleExtractor_ForStream_ShouldReturnOptimizedExtractorWhenOutputHasConstantLabels(t *testing.T) {
 	lbs := labels.FromStrings("namespace", "dev", "cluster", "us-central1")
 

@@ -38,6 +38,10 @@ func (dl *DropLabels) Process(_ int64, line []byte, lbls *LabelsBuilder) ([]byte
 	return line, true
 }
 
+func (dl *DropLabels) ProcessBatch(b *ArrowBatch) *ArrowBatch {
+	return processStageLineByLine(b, dl.Process)
+}
+
 // Hints implements Stage.
 func (dl *DropLabels) Hints() StageHints {
 	return StageHints{CanModifyLabels: true}

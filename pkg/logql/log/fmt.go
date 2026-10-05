@@ -271,6 +271,10 @@ func (lf *LineFormatter) Process(ts int64, line []byte, lbs *LabelsBuilder) ([]b
 	return lf.buf.Bytes(), true
 }
 
+func (lf *LineFormatter) ProcessBatch(b *ArrowBatch) *ArrowBatch {
+	return processStageLineByLine(b, lf.Process)
+}
+
 // Hints implements Stage.
 func (lf *LineFormatter) Hints() StageHints {
 	// line_format rewrites the line, but it sets __error__ when the template fails, which changes the
@@ -454,6 +458,10 @@ func (lf *LabelsFormatter) Process(ts int64, l []byte, lbs *LabelsBuilder) ([]by
 	return l, true
 }
 
+func (lf *LabelsFormatter) ProcessBatch(b *ArrowBatch) *ArrowBatch {
+	return processStageLineByLine(b, lf.Process)
+}
+
 // Hints implements Stage.
 func (lf *LabelsFormatter) Hints() StageHints {
 	// label_format renames or sets labels.
@@ -523,6 +531,10 @@ func NewDecolorizer() (*Decolorizer, error) {
 
 func (Decolorizer) Process(_ int64, line []byte, _ *LabelsBuilder) ([]byte, bool) {
 	return ansiRegex.ReplaceAll(line, []byte{}), true
+}
+
+func (d Decolorizer) ProcessBatch(b *ArrowBatch) *ArrowBatch {
+	return processStageLineByLine(b, d.Process)
 }
 
 // Hints implements Stage.

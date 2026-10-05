@@ -44,6 +44,10 @@ type StreamSampleExtractor interface {
 	// ProcessString extracts the sample for a log line. It returns the zero sample
 	// and false when it extracts none. A true result always carries non-nil Labels.
 	ProcessString(ts int64, line string, structuredMetadata labels.Labels) (ExtractedSample, bool)
+
+	// ProcessBatch extracts samples for a log line batch.
+	ProcessBatch(b *ArrowBatch) *ArrowBatch
+
 	ReferencedStructuredMetadata() bool
 }
 
@@ -200,6 +204,10 @@ func (l *streamLineSampleExtractor) ProcessString(ts int64, line string, structu
 	return l.Process(ts, unsafeGetBytes(line), structuredMetadata)
 }
 
+func (l *streamLineSampleExtractor) ProcessBatch(b *ArrowBatch) *ArrowBatch {
+	return processSampleLineByLine(b, l.Process)
+}
+
 func (l *streamLineSampleExtractor) BaseLabels() LabelsResult { return l.builder.currentResult }
 
 // noopConstantLabelStreamExtractor is a constant-label specialization for the NoopStage case. It
@@ -228,6 +236,10 @@ func (e *noopConstantLabelStreamExtractor) Process(_ int64, line []byte, structu
 func (e *noopConstantLabelStreamExtractor) ProcessString(ts int64, line string, structuredMetadata labels.Labels) (ExtractedSample, bool) {
 	// We can use unsafeGetBytes() since we have the guarantee that the line won't be mutated.
 	return e.Process(ts, unsafeGetBytes(line), structuredMetadata)
+}
+
+func (e *noopConstantLabelStreamExtractor) ProcessBatch(b *ArrowBatch) *ArrowBatch {
+	return processSampleLineByLine(b, e.Process)
 }
 
 func (e *noopConstantLabelStreamExtractor) BaseLabels() LabelsResult {
@@ -280,6 +292,10 @@ func (e *filteredConstantLabelStreamExtractor) Process(ts int64, line []byte, st
 
 func (e *filteredConstantLabelStreamExtractor) ProcessString(ts int64, line string, structuredMetadata labels.Labels) (ExtractedSample, bool) {
 	return e.Process(ts, unsafeGetBytes(line), structuredMetadata)
+}
+
+func (e *filteredConstantLabelStreamExtractor) ProcessBatch(b *ArrowBatch) *ArrowBatch {
+	return processSampleLineByLine(b, e.Process)
 }
 
 func (e *filteredConstantLabelStreamExtractor) BaseLabels() LabelsResult {
@@ -398,6 +414,10 @@ func (l *streamLabelSampleExtractor) ProcessString(ts int64, line string, struct
 	return l.Process(ts, unsafeGetBytes(line), structuredMetadata)
 }
 
+func (l *streamLabelSampleExtractor) ProcessBatch(b *ArrowBatch) *ArrowBatch {
+	return processSampleLineByLine(b, l.Process)
+}
+
 func (l *streamLabelSampleExtractor) BaseLabels() LabelsResult { return l.builder.currentResult }
 
 // NewDistinctValueSampleExtractor hashes the raw string value of a label or
@@ -474,6 +494,10 @@ func (d *streamDistinctValueSampleExtractor) Process(ts int64, line []byte, stru
 
 func (d *streamDistinctValueSampleExtractor) ProcessString(ts int64, line string, structuredMetadata labels.Labels) (ExtractedSample, bool) {
 	return d.Process(ts, unsafeGetBytes(line), structuredMetadata)
+}
+
+func (d *streamDistinctValueSampleExtractor) ProcessBatch(b *ArrowBatch) *ArrowBatch {
+	return processSampleLineByLine(b, d.Process)
 }
 
 func (d *streamDistinctValueSampleExtractor) BaseLabels() LabelsResult {
@@ -554,6 +578,10 @@ func (sp *filteringStreamExtractor) ProcessString(ts int64, line string, structu
 	}
 
 	return sp.extractor.ProcessString(ts, line, structuredMetadata)
+}
+
+func (sp *filteringStreamExtractor) ProcessBatch(b *ArrowBatch) *ArrowBatch {
+	return processSampleLineByLine(b, sp.Process)
 }
 
 func convertFloat(v string) (float64, error) {
