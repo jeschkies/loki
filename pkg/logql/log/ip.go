@@ -53,6 +53,11 @@ func (f *IPLineFilter) Filter(line []byte) bool {
 	return f.filterTy(line, f.ty)
 }
 
+// FilterBatch implements Filterer.
+func (f *IPLineFilter) FilterBatch(b *ArrowBatch) *ArrowBatch {
+	return filterLineByLine(b, f.Filter)
+}
+
 // ToStage implements `Filterer` interface.
 func (f *IPLineFilter) ToStage() Stage {
 	return f

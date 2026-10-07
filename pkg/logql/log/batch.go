@@ -27,9 +27,20 @@ func (b *ArrowBatch) NewBuilder() *BatchBuilder {
 
 	builder.ts.Reserve(len(b.Selection))
 	builder.lines.Reserve(len(b.Selection))
-	builder.StructuredMetadata = make([]labels.Labels, len(b.Selection), 0)
+	builder.StructuredMetadata = make([]labels.Labels, 0, len(b.Selection))
 
 	return builder
+}
+
+func (b *ArrowBatch) GetLineOffset(i int) int {
+	if i >= len(b.Selection) {
+		return -1
+	}
+
+	offsetIndex := b.Selection[i]
+
+	base := int(b.LineColumn.ValueOffset(0))                 // 0 for unsliced arrays
+	return int(b.LineColumn.ValueOffset(offsetIndex)) - base // index of line start
 }
 
 type BatchBuilder struct {
@@ -134,4 +145,29 @@ func processSampleLineByLine(b *ArrowBatch, f func(int64, []byte, labels.Labels)
 		}
 	}
 	return builder.Result()
+}
+
+// filterLineByLine is the fallback for Filterer.FilterBatch. It applies the
+// scalar filter f to every selected row. Unlike the processing fallbacks it
+// does not copy any data: the result shares the columns of b and only narrows
+// the selection.
+func filterLineByLine(b *ArrowBatch, f func([]byte) bool) *ArrowBatch {
+	out := *b
+	if b.Selection == nil {
+		out.Selection = make([]int, 0, b.LineColumn.Len())
+		for i := 0; i < b.LineColumn.Len(); i++ {
+			if f(unsafeGetBytes(b.LineColumn.Value(i))) {
+				out.Selection = append(out.Selection, i)
+			}
+		}
+		return &out
+	}
+
+	out.Selection = make([]int, 0, len(b.Selection))
+	for _, i := range b.Selection {
+		if f(unsafeGetBytes(b.LineColumn.Value(i))) {
+			out.Selection = append(out.Selection, i)
+		}
+	}
+	return &out
 }

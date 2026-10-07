@@ -9,6 +9,7 @@ import (
 	"github.com/grafana/regexp"
 	"github.com/grafana/regexp/syntax"
 
+	memmem "github.com/jeschkies/go-memmem/pkg/search"
 	"github.com/prometheus/prometheus/model/labels"
 
 	"github.com/grafana/loki/v3/pkg/logql/log/pattern"
@@ -64,6 +65,7 @@ type Matcher interface {
 // Filterer is a interface to filter log lines.
 type Filterer interface {
 	Filter(line []byte) bool
+	FilterBatch(b *ArrowBatch) *ArrowBatch
 	ToStage() Stage
 }
 
@@ -100,10 +102,19 @@ func (f FiltererFunc) Filter(line []byte) bool {
 	return f(line)
 }
 
+// FilterBatch implements Filterer.
+func (f FiltererFunc) FilterBatch(b *ArrowBatch) *ArrowBatch {
+	return filterLineByLine(b, f.Filter)
+}
+
 type trueFilter struct{}
 
 func (trueFilter) Filter(_ []byte) bool { return true }
-func (trueFilter) ToStage() Stage       { return NoopStage }
+
+// FilterBatch implements Filterer.
+func (trueFilter) FilterBatch(b *ArrowBatch) *ArrowBatch { return b }
+
+func (trueFilter) ToStage() Stage { return NoopStage }
 
 // Matches implements Matcher
 func (trueFilter) Matches(_ Checker) bool { return true }
@@ -141,6 +152,11 @@ func (e existsFilter) Filter(line []byte) bool {
 	return len(line) > 0
 }
 
+// FilterBatch implements Filterer.
+func (e existsFilter) FilterBatch(b *ArrowBatch) *ArrowBatch {
+	return filterLineByLine(b, e.Filter)
+}
+
 func (e existsFilter) ToStage() Stage {
 	return NewStageFunc(nil, StageHints{CanModifyLabels: false}, func(_ int64, line []byte, _ *LabelsBuilder) ([]byte, bool) {
 		return line, e.Filter(line)
@@ -159,6 +175,11 @@ type notFilter struct {
 
 func (n notFilter) Filter(line []byte) bool {
 	return !n.MatcherFilterer.Filter(line)
+}
+
+// FilterBatch implements Filterer.
+func (n notFilter) FilterBatch(b *ArrowBatch) *ArrowBatch {
+	return filterLineByLine(b, n.Filter)
 }
 
 func (n notFilter) ToStage() Stage {
@@ -205,6 +226,11 @@ func NewAndFilter(left MatcherFilterer, right MatcherFilterer) MatcherFilterer {
 
 func (a andFilter) Filter(line []byte) bool {
 	return a.left.Filter(line) && a.right.Filter(line)
+}
+
+// FilterBatch implements Filterer.
+func (a andFilter) FilterBatch(b *ArrowBatch) *ArrowBatch {
+	return filterLineByLine(b, a.Filter)
 }
 
 func (a andFilter) ToStage() Stage {
@@ -286,6 +312,11 @@ func (a andFilters) Filter(line []byte) bool {
 	return true
 }
 
+// FilterBatch implements Filterer.
+func (a andFilters) FilterBatch(b *ArrowBatch) *ArrowBatch {
+	return filterLineByLine(b, a.Filter)
+}
+
 func (a andFilters) ToStage() Stage {
 	return NewStageFunc(nil, StageHints{CanModifyLabels: false}, func(_ int64, line []byte, _ *LabelsBuilder) ([]byte, bool) {
 		return line, a.Filter(line)
@@ -330,6 +361,11 @@ func (a orFilter) Filter(line []byte) bool {
 	return a.left.Filter(line) || a.right.Filter(line)
 }
 
+// FilterBatch implements Filterer.
+func (a orFilter) FilterBatch(b *ArrowBatch) *ArrowBatch {
+	return filterLineByLine(b, a.Filter)
+}
+
 func (a orFilter) ToStage() Stage {
 	return NewStageFunc(nil, StageHints{CanModifyLabels: false}, func(_ int64, line []byte, _ *LabelsBuilder) ([]byte, bool) {
 		return line, a.Filter(line)
@@ -365,6 +401,11 @@ func (r regexpFilter) Filter(line []byte) bool {
 	return r.Match(line)
 }
 
+// FilterBatch implements Filterer.
+func (r regexpFilter) FilterBatch(b *ArrowBatch) *ArrowBatch {
+	return filterLineByLine(b, r.Filter)
+}
+
 func (r regexpFilter) ToStage() Stage {
 	return NewStageFunc(nil, StageHints{CanModifyLabels: false}, func(_ int64, line []byte, _ *LabelsBuilder) ([]byte, bool) {
 		return line, r.Filter(line)
@@ -390,6 +431,11 @@ func (l equalFilter) Filter(line []byte) bool {
 	}
 
 	return contains(line, l.match, l.caseInsensitive)
+}
+
+// FilterBatch implements Filterer.
+func (l equalFilter) FilterBatch(b *ArrowBatch) *ArrowBatch {
+	return filterLineByLine(b, l.Filter)
 }
 
 func (l equalFilter) ToStage() Stage {
@@ -420,6 +466,76 @@ type containsFilter struct {
 
 func (l *containsFilter) Filter(line []byte) bool {
 	return contains(line, l.match, l.caseInsensitive)
+}
+
+// FilterBatch implements Filterer.
+//
+// Instead of searching every line on its own, it searches the concatenated
+// values buffer of the Arrow string column once per hit and maps each hit back
+// to the row containing it.
+//
+// The batch is modified in place: its selection is compacted to the matching rows
+// and b itself is returned. A nil selection is expanded to a new one. Callers that
+// still need the original selection must copy it before the call.
+func (l *containsFilter) FilterBatch(b *ArrowBatch) *ArrowBatch {
+	if l.caseInsensitive {
+		return filterLineByLine(b, l.Filter)
+	}
+
+	sel := b.Selection
+	if sel == nil {
+		sel = make([]int, b.LineColumn.Len())
+		for i := range sel {
+			sel[i] = i
+		}
+		b.Selection = sel
+	}
+
+	if len(l.match) == 0 || len(sel) == 0 {
+		return b
+	}
+
+	// Every match is written at or before the position it was read from, so
+	// the selection can be compacted in place.
+	matched := sel[:0]
+
+	hay := b.LineColumn.ValueBytes()
+	base := b.LineColumn.ValueOffset(0) // 0 for unsliced arrays
+	lineStart := func(pos int) int { return b.LineColumn.ValueOffset(sel[pos]) - base }
+	lineEnd := func(pos int) int { return lineStart(pos) + b.LineColumn.ValueLen(sel[pos]) }
+
+	selIndex := 0 // position in sel of the first row that can still match
+	for selIndex < len(sel) {
+		// Search from the start of the next selected row. This skips the bytes
+		// of unselected rows.
+		from := lineStart(selIndex)
+
+		hit := int(memmem.Index(hay[from:], l.match))
+		if hit < 0 {
+			break
+		}
+		hitStart := from + hit
+		hitEnd := hitStart + len(l.match)
+
+		// Find the selected row containing the hit, i.e. the last one starting
+		// at or before it. lineStart(selIndex) = from <= hitStart.
+		p := selIndex
+		for p+1 < len(sel) && lineStart(p+1) <= hitStart {
+			p++
+		}
+
+		// The hit only counts if it lies completely inside the row. Otherwise
+		// it is in unselected rows after p or straddles p and the next row.
+		// Row p has no other match in that case: it would start after hitStart
+		// and, having the same length, end after the row does.
+		if hitEnd <= lineEnd(p) {
+			matched = append(matched, sel[p])
+		}
+		selIndex = p + 1
+	}
+
+	b.Selection = matched
+	return b
 }
 
 func contains(line, substr []byte, caseInsensitive bool) bool {
@@ -569,6 +685,11 @@ func (f containsAllFilter) Filter(line []byte) bool {
 		}
 	}
 	return true
+}
+
+// FilterBatch implements Filterer.
+func (f containsAllFilter) FilterBatch(b *ArrowBatch) *ArrowBatch {
+	return filterLineByLine(b, f.Filter)
 }
 
 func (f containsAllFilter) ToStage() Stage {
@@ -853,6 +974,11 @@ func newPatternFilterer(p []byte, match bool) (MatcherFilterer, error) {
 }
 
 func (f *patternFilter) Filter(line []byte) bool { return f.matcher.Test(line) }
+
+// FilterBatch implements Filterer.
+func (f *patternFilter) FilterBatch(b *ArrowBatch) *ArrowBatch {
+	return filterLineByLine(b, f.Filter)
+}
 
 func (f *patternFilter) Matches(test Checker) bool {
 	return test.Test(f.pattern, false, false)
