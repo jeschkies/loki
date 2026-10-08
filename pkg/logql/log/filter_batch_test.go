@@ -1,6 +1,7 @@
 package log
 
 import (
+	"fmt"
 	"math/rand"
 	"slices"
 	"testing"
@@ -179,37 +180,78 @@ func TestContainsFilter_FilterBatch_Random(t *testing.T) {
 }
 
 func BenchmarkContainsFilter_FilterBatch(b *testing.B) {
-	const (
-		rows    = 10_000
-		needle  = "GC pause"
-		padding = "level=info ts=2026-10-07T12:00:00Z caller=server.go:123 msg=\"request handled\" duration=12ms status=200 path=/loki/api/v1/query_range"
-	)
+	const padding = "level=info ts=2026-10-07T12:00:00Z caller=server.go:123 msg=\"request handled\" duration=12ms status=200 path=/loki/api/v1/query_range"
 
-	for _, bc := range []struct {
+	// A dataset defines the lines, the needle to look for, and how a line
+	// containing the needle is generated.
+	type dataset struct {
+		name   string
+		needle string
+		// line returns the i-th line. If hit is set, it contains the needle.
+		line func(i int, hit bool, rng *rand.Rand) string
+	}
+	datasets := []dataset{
+		{
+			// Long lines, and the first byte of the needle does not occur in them.
+			name:   "long_lines",
+			needle: "GC pause",
+			line: func(_ int, hit bool, rng *rand.Rand) string {
+				if !hit {
+					return padding
+				}
+				pos := rng.Intn(len(padding))
+				return padding[:pos] + "GC pause" + padding[pos:]
+			},
+		},
+		{
+			// Short lines, and the first byte of the needle occurs in every line
+			// (the "m" in "method"), which is hard for a first-byte search such
+			// as bytes.Index.
+			name:   "short_lines",
+			needle: "matchme",
+			line: func(i int, hit bool, rng *rand.Rand) string {
+				field := ""
+				if hit {
+					field = "matchme"
+				}
+				return fmt.Sprintf("logline=%d level=info method=GET path=/api/v1/query duration=%dms extra=%s", i, rng.Intn(1000), field)
+			},
+		},
+	}
+
+	type benchCase struct {
 		name       string
+		dataset    dataset
+		size       int  // approximate size of the values buffer in bytes
 		hitEvery   int  // every n-th line contains the needle
 		sparseRows bool // select only every other row
-	}{
-		{name: "rare_hits/dense", hitEvery: 100},
-		{name: "rare_hits/sparse", hitEvery: 100, sparseRows: true},
-		{name: "common_hits/dense", hitEvery: 2},
-		{name: "common_hits/sparse", hitEvery: 2, sparseRows: true},
-		{name: "no_hits/dense", hitEvery: 0},
-	} {
+	}
+	var cases []benchCase
+	for _, ds := range datasets {
+		for _, size := range []int{512 << 10, 1 << 20, 4 << 20} {
+			prefix := fmt.Sprintf("%s/size=%dKiB", ds.name, size>>10)
+			cases = append(cases,
+				benchCase{name: prefix + "/rare_hits/dense", dataset: ds, size: size, hitEvery: 100},
+				benchCase{name: prefix + "/rare_hits/sparse", dataset: ds, size: size, hitEvery: 100, sparseRows: true},
+				benchCase{name: prefix + "/common_hits/dense", dataset: ds, size: size, hitEvery: 2},
+				benchCase{name: prefix + "/common_hits/sparse", dataset: ds, size: size, hitEvery: 2, sparseRows: true},
+				benchCase{name: prefix + "/no_hits/dense", dataset: ds, size: size, hitEvery: 0},
+			)
+		}
+	}
+
+	for _, bc := range cases {
 		rng := rand.New(rand.NewSource(1))
-		lines := make([]string, rows)
-		for i := range lines {
-			line := padding
-			if bc.hitEvery > 0 && i%bc.hitEvery == 0 {
-				pos := rng.Intn(len(padding))
-				line = padding[:pos] + needle + padding[pos:]
-			}
-			lines[i] = line
+		var lines []string
+		for total, i := 0, 0; total < bc.size; i++ {
+			line := bc.dataset.line(i, bc.hitEvery > 0 && i%bc.hitEvery == 0, rng)
+			lines = append(lines, line)
+			total += len(line)
 		}
 
 		// Throughput counts only the bytes of selected rows.
 		selectedBytes := 0
-		selection := make([]int, 0, rows)
+		selection := make([]int, 0, len(lines))
 		for i := range lines {
 			if !bc.sparseRows || i%2 == 0 {
 				selection = append(selection, i)
@@ -217,7 +259,7 @@ func BenchmarkContainsFilter_FilterBatch(b *testing.B) {
 			}
 		}
 
-		f := &containsFilter{match: []byte(needle)}
+		f := &containsFilter{match: []byte(bc.dataset.needle)}
 		scratch := make([]int, len(selection))
 		batch := newTestStringBatch(lines, slices.Clone(selection))
 

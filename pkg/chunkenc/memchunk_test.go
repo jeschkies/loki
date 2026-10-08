@@ -1024,6 +1024,15 @@ func (nomatchPipeline) ProcessString(_ int64, line string, _ labels.Labels) (str
 	return line, nil, false
 }
 
+func (nomatchPipeline) ProcessBatch(b *log.ArrowBatch) *log.ArrowBatch {
+	return &log.ArrowBatch{
+		Timestamps:         b.Timestamps,
+		LineColumn:         b.LineColumn,
+		StructuredMetadata: b.StructuredMetadata,
+		Selection:          []int{},
+	}
+}
+
 func (nomatchPipeline) ReferencedStructuredMetadata() bool {
 	return false
 }
@@ -1093,6 +1102,15 @@ func (noopTestPipeline) Process(_ int64, line []byte, _ labels.Labels) ([]byte, 
 
 func (noopTestPipeline) ProcessString(_ int64, line string, _ labels.Labels) (string, log.LabelsResult, bool) {
 	return line, nil, false
+}
+
+func (noopTestPipeline) ProcessBatch(b *log.ArrowBatch) *log.ArrowBatch {
+	return &log.ArrowBatch{
+		Timestamps:         b.Timestamps,
+		LineColumn:         b.LineColumn,
+		StructuredMetadata: b.StructuredMetadata,
+		Selection:          []int{},
+	}
 }
 
 func (noopTestPipeline) ReferencedStructuredMetadata() bool {

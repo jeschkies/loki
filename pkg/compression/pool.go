@@ -2,8 +2,14 @@ package compression
 
 import (
 	"bufio"
+	"bytes"
+	"encoding/binary"
+	"errors"
+	"fmt"
 	"io"
+	"math"
 	"runtime"
+	"slices"
 	"sync"
 
 	snappylib "github.com/golang/snappy"
@@ -37,10 +43,11 @@ var (
 	// gzip is the gnu zip compression pool
 	gzip = GzipPool{level: gziplib.DefaultCompression}
 	// lz4_* are the lz4 compression pools
-	lz4_64k  = LZ4Pool{bufferSize: 1 << 16} // lz4_64k is the l4z compression pool, with 64k buffer size
-	lz4_256k = LZ4Pool{bufferSize: 1 << 18} // lz4_256k uses 256k buffer
-	lz4_1M   = LZ4Pool{bufferSize: 1 << 20} // lz4_1M uses 1M buffer
-	lz4_4M   = LZ4Pool{bufferSize: 1 << 22} // lz4_4M uses 4M buffer
+	lz4_64k   = LZ4Pool{bufferSize: 1 << 16} // lz4_64k is the l4z compression pool, with 64k buffer size
+	lz4_256k  = LZ4Pool{bufferSize: 1 << 18} // lz4_256k uses 256k buffer
+	lz4_1M    = LZ4Pool{bufferSize: 1 << 20} // lz4_1M uses 1M buffer
+	lz4_4M    = LZ4Pool{bufferSize: 1 << 22} // lz4_4M uses 4M buffer
+	lz4_block = LZ4BlockPool{}
 	// flate is the flate compression pool
 	flate = FlatePool{}
 	// zstd is the zstd compression pool
@@ -71,6 +78,8 @@ func GetPool(enc Codec) ReaderWriterPool {
 		return &lz4_1M
 	case LZ4_4M:
 		return &lz4_4M
+	case LZ4_Block:
+		return &lz4_block
 	case Snappy:
 		return &snappy
 	case None:
@@ -303,6 +312,192 @@ func (pool *LZ4Pool) GetWriter(dst io.Writer) io.WriteCloser {
 // PutWriter places back in the pool a CompressionWriter
 func (pool *LZ4Pool) PutWriter(writer io.WriteCloser) {
 	pool.writers.Put(writer)
+}
+
+// LZ4BlockPool compresses data as a single LZ4 block instead of an LZ4 frame stream.
+// Its streams are laid out as uvarint uncompressedLen, uvarint compressedLen, block.
+type LZ4BlockPool struct {
+	readers     sync.Pool
+	writers     sync.Pool
+	compressors sync.Pool
+}
+
+// maxLZ4Ratio bounds the uncompressed to compressed size ratio, to reject absurd headers.
+const maxLZ4Ratio = 256
+
+// CompressBlock appends src to dst as one LZ4 block, or src itself if it is incompressible.
+// A compressed block is always shorter than src, which tells the two apart.
+func (pool *LZ4BlockPool) CompressBlock(dst, src []byte) ([]byte, error) {
+	if len(src) == 0 {
+		return dst, nil
+	}
+
+	c, ok := pool.compressors.Get().(*lz4lib.Compressor)
+	if !ok {
+		c = &lz4lib.Compressor{}
+	}
+	defer pool.compressors.Put(c)
+
+	start := len(dst)
+	bound := lz4lib.CompressBlockBound(len(src))
+	dst = slices.Grow(dst, bound)
+	n, err := c.CompressBlock(src, dst[start:start+bound])
+	if err != nil {
+		return dst[:start], err
+	}
+	if n == 0 || n >= len(src) {
+		return append(dst[:start], src...), nil
+	}
+	return dst[:start+n], nil
+}
+
+// DecompressBlock decompresses src into dst, reusing its capacity, and returns it with length
+// uncompressedLen. A src of exactly that length is stored raw.
+func (pool *LZ4BlockPool) DecompressBlock(dst, src []byte, uncompressedLen int) ([]byte, error) {
+	if uncompressedLen < 0 {
+		return dst[:0], fmt.Errorf("negative uncompressed length %d", uncompressedLen)
+	}
+	if len(src) == uncompressedLen {
+		return append(dst[:0], src...), nil
+	}
+	if uncompressedLen > len(src)*maxLZ4Ratio {
+		return dst[:0], fmt.Errorf("uncompressed length %d is implausible for %d compressed bytes", uncompressedLen, len(src))
+	}
+
+	dst = slices.Grow(dst[:0], uncompressedLen)[:uncompressedLen]
+	n, err := lz4lib.UncompressBlock(src, dst)
+	if err != nil {
+		return dst[:0], err
+	}
+	if n != uncompressedLen {
+		return dst[:0], fmt.Errorf("decompressed %d bytes, expected %d", n, uncompressedLen)
+	}
+	return dst, nil
+}
+
+// lz4BlockWriter buffers all writes and writes them as one block on Close.
+type lz4BlockWriter struct {
+	pool *LZ4BlockPool
+	dst  io.Writer
+	in   []byte
+	out  []byte
+}
+
+func (w *lz4BlockWriter) Write(p []byte) (int, error) {
+	w.in = append(w.in, p...)
+	return len(p), nil
+}
+
+func (w *lz4BlockWriter) Close() error {
+	block, err := w.pool.CompressBlock(w.out[:0], w.in)
+	w.out = block
+	if err != nil {
+		return err
+	}
+
+	header := binary.AppendUvarint(nil, uint64(len(w.in)))
+	header = binary.AppendUvarint(header, uint64(len(block)))
+	if _, err := w.dst.Write(header); err != nil {
+		return err
+	}
+	_, err = w.dst.Write(block)
+	return err
+}
+
+// GetWriter gets or creates a new CompressionWriter and reset it to write to dst
+func (pool *LZ4BlockPool) GetWriter(dst io.Writer) io.WriteCloser {
+	w, ok := pool.writers.Get().(*lz4BlockWriter)
+	if !ok {
+		w = &lz4BlockWriter{pool: pool}
+	}
+	w.dst = dst
+	w.in = w.in[:0]
+	return w
+}
+
+// PutWriter places back in the pool a CompressionWriter
+func (pool *LZ4BlockPool) PutWriter(writer io.WriteCloser) {
+	w := writer.(*lz4BlockWriter)
+	// Free the reference to the underlying writer.
+	w.dst = nil
+	pool.writers.Put(w)
+}
+
+// lz4BlockReader reads all of src and decompresses it on the first Read.
+type lz4BlockReader struct {
+	pool   *LZ4BlockPool
+	src    io.Reader
+	in     []byte
+	out    []byte
+	data   bytes.Reader
+	loaded bool
+}
+
+func (r *lz4BlockReader) Read(p []byte) (int, error) {
+	if !r.loaded {
+		if err := r.load(); err != nil {
+			return 0, err
+		}
+		r.loaded = true
+	}
+	return r.data.Read(p)
+}
+
+func (r *lz4BlockReader) load() error {
+	// A block can only be decoded whole, so read all of src first.
+	buf := bytes.NewBuffer(r.in[:0])
+	if _, err := buf.ReadFrom(r.src); err != nil {
+		return err
+	}
+	r.in = buf.Bytes()
+	r.data.Reset(nil)
+	if len(r.in) == 0 {
+		return nil
+	}
+
+	uncompressedLen, n := binary.Uvarint(r.in)
+	if n <= 0 {
+		return errors.New("invalid lz4 block uncompressed length")
+	}
+	compressedLen, m := binary.Uvarint(r.in[n:])
+	if m <= 0 {
+		return errors.New("invalid lz4 block compressed length")
+	}
+	block := r.in[n+m:]
+	if uint64(len(block)) != compressedLen {
+		return fmt.Errorf("lz4 block has %d bytes, expected %d", len(block), compressedLen)
+	}
+	if uncompressedLen > math.MaxInt32 {
+		return fmt.Errorf("lz4 block uncompressed length %d too large", uncompressedLen)
+	}
+
+	out, err := r.pool.DecompressBlock(r.out[:0], block, int(uncompressedLen))
+	if err != nil {
+		return err
+	}
+	r.out = out
+	r.data.Reset(out)
+	return nil
+}
+
+// GetReader gets or creates a new CompressionReader and reset it to read from src
+func (pool *LZ4BlockPool) GetReader(src io.Reader) (io.Reader, error) {
+	r, ok := pool.readers.Get().(*lz4BlockReader)
+	if !ok {
+		r = &lz4BlockReader{pool: pool}
+	}
+	r.src = src
+	r.loaded = false
+	r.data.Reset(nil)
+	return r, nil
+}
+
+// PutReader places back in the pool a CompressionReader
+func (pool *LZ4BlockPool) PutReader(reader io.Reader) {
+	r := reader.(*lz4BlockReader)
+	// Free the reference to the underlying reader.
+	r.src = nil
+	pool.readers.Put(r)
 }
 
 type SnappyPool struct {

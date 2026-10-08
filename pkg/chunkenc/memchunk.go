@@ -33,6 +33,7 @@ const (
 	ChunkFormatV2
 	ChunkFormatV3
 	ChunkFormatV4
+	ChunkFormatV5
 
 	blocksPerChunk = 10
 	maxLineLength  = 1024 * 1024 * 1024
@@ -217,6 +218,42 @@ func (hb *headBlock) Serialise(pool compression.WriterPool) ([]byte, error) {
 	if _, err := compressedWriter.Write(inBuf.Bytes()); err != nil {
 		return nil, errors.Wrap(err, "appending entry")
 	}
+	if err := compressedWriter.Close(); err != nil {
+		return nil, errors.Wrap(err, "flushing pending compress buffer")
+	}
+
+	return outBuf.Bytes(), nil
+}
+
+func (hb *headBlock) SerialiseColumnar(pool compression.WriterPool) ([]byte, error) {
+	outBuf := &bytes.Buffer{}
+
+	tsBytes := make([]byte, 0, 8*len(hb.entries))
+	prevTs := int64(0)
+	offsetsBytes := binary.LittleEndian.AppendUint32(make([]byte, 0, 4*(len(hb.entries)+1)), 0)
+	linesBytes := make([]byte, 0, hb.size)
+	for _, logEntry := range hb.entries {
+		// Delta encode timestamps
+		tsBytes = binary.LittleEndian.AppendUint64(tsBytes, uint64(logEntry.t-int64(prevTs)))
+		prevTs = logEntry.t
+
+		linesBytes = append(linesBytes, logEntry.s...)
+		offsetsBytes = binary.LittleEndian.AppendUint32(offsetsBytes, uint32(len(linesBytes)))
+	}
+
+	compressedWriter := pool.GetWriter(outBuf)
+	defer pool.PutWriter(compressedWriter)
+
+	if _, err := compressedWriter.Write(tsBytes); err != nil {
+		return nil, errors.Wrap(err, "appending entry timestamps")
+	}
+	if _, err := compressedWriter.Write(offsetsBytes); err != nil {
+		return nil, errors.Wrap(err, "appending entry offsets")
+	}
+	if _, err := compressedWriter.Write(linesBytes); err != nil {
+		return nil, errors.Wrap(err, "appending entry bytes")
+	}
+
 	if err := compressedWriter.Close(); err != nil {
 		return nil, errors.Wrap(err, "flushing pending compress buffer")
 	}
@@ -962,7 +999,11 @@ func (c *MemChunk) cut() error {
 		return nil
 	}
 
-	b, err := c.head.Serialise(compression.GetWriterPool(c.encoding))
+	serialise := c.head.Serialise
+	if c.format >= ChunkFormatV5 {
+		serialise = c.head.SerialiseColumnar
+	}
+	b, err := serialise(compression.GetWriterPool(c.encoding))
 	if err != nil {
 		return err
 	}
@@ -1060,10 +1101,12 @@ func (c *MemChunk) Iterator(ctx context.Context, mintT, maxtT time.Time, directi
 	// reverse each block entries
 	for i, it := range blockItrs {
 		r, err := iter.NewEntryReversedIter(
-			iter.NewTimeRangedIterator(it,
+			iter.NewTimeRangedIterator(
+				it,
 				time.Unix(0, mint),
 				time.Unix(0, maxt),
-			))
+			),
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -1779,7 +1822,6 @@ func newEntryIterator(ctx context.Context, pool compression.ReaderPool, b []byte
 		e.currLabels = pipeline.BaseLabels()
 	}
 	return e
-
 }
 
 type entryBufferedIterator struct {

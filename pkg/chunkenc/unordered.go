@@ -31,6 +31,7 @@ type HeadBlock interface {
 	CheckpointSize() int
 	LoadBytes(b []byte) error
 	Serialise(pool compression.WriterPool) ([]byte, error)
+	SerialiseColumnar(pool compression.WriterPool) ([]byte, error)
 	Reset()
 	Bounds() (mint, maxt int64)
 	Entries() int
@@ -459,6 +460,81 @@ func (hb *unorderedHeadBlock) Serialise(pool compression.WriterPool) ([]byte, er
 	if _, err := compressedWriter.Write(inBuf.Bytes()); err != nil {
 		return nil, errors.Wrap(err, "appending entry")
 	}
+	if err := compressedWriter.Close(); err != nil {
+		return nil, errors.Wrap(err, "flushing pending compress buffer")
+	}
+
+	return outBuf.Bytes(), nil
+}
+
+// SerialiseColumnar creates a columnar, compressed block from an unorderedHeadBlock. The columns are
+// written to a single compressed stream in this order, all little-endian:
+//   - timestamps: one uint64 per entry, delta encoded with the first being absolute
+//   - line offsets: one uint32 per entry plus a leading 0, so line i is lines[offsets[i]:offsets[i+1]]
+//   - lines: all lines back to back
+//   - symbol counts: one uint32 per entry, the number of structured metadata symbols
+//   - symbols: the uint32 (name, value) pairs of all entries back to back
+//
+// The last two are only written for head blocks with structured metadata.
+func (hb *unorderedHeadBlock) SerialiseColumnar(pool compression.WriterPool) ([]byte, error) {
+	outBuf := &bytes.Buffer{}
+
+	withStructuredMetadata := hb.format >= UnorderedWithStructuredMetadataHeadBlockFmt
+
+	tsBytes := make([]byte, 0, 8*hb.lines)
+	prevTs := int64(0)
+	offsetsBytes := binary.LittleEndian.AppendUint32(make([]byte, 0, 4*(hb.lines+1)), 0)
+	linesBytes := make([]byte, 0, hb.size)
+	var symbolCountsBytes, symbolsBytes []byte
+	if withStructuredMetadata {
+		symbolCountsBytes = make([]byte, 0, 4*hb.lines)
+	}
+
+	_ = hb.forEntries(
+		context.Background(),
+		logproto.FORWARD,
+		0,
+		math.MaxInt64,
+		func(_ *stats.Context, ts int64, line string, structuredMetadataSymbols symbols) error {
+			// Delta encode timestamps
+			tsBytes = binary.LittleEndian.AppendUint64(tsBytes, uint64(ts-prevTs))
+			prevTs = ts
+
+			linesBytes = append(linesBytes, line...)
+			offsetsBytes = binary.LittleEndian.AppendUint32(offsetsBytes, uint32(len(linesBytes)))
+
+			if withStructuredMetadata {
+				symbolCountsBytes = binary.LittleEndian.AppendUint32(symbolCountsBytes, uint32(len(structuredMetadataSymbols)))
+				for _, s := range structuredMetadataSymbols {
+					symbolsBytes = binary.LittleEndian.AppendUint32(symbolsBytes, s.Name)
+					symbolsBytes = binary.LittleEndian.AppendUint32(symbolsBytes, s.Value)
+				}
+			}
+			return nil
+		},
+	)
+
+	compressedWriter := pool.GetWriter(outBuf)
+	defer pool.PutWriter(compressedWriter)
+
+	if _, err := compressedWriter.Write(tsBytes); err != nil {
+		return nil, errors.Wrap(err, "appending entry timestamps")
+	}
+	if _, err := compressedWriter.Write(offsetsBytes); err != nil {
+		return nil, errors.Wrap(err, "appending entry offsets")
+	}
+	if _, err := compressedWriter.Write(linesBytes); err != nil {
+		return nil, errors.Wrap(err, "appending entry bytes")
+	}
+	if withStructuredMetadata {
+		if _, err := compressedWriter.Write(symbolCountsBytes); err != nil {
+			return nil, errors.Wrap(err, "appending structured metadata symbol counts")
+		}
+		if _, err := compressedWriter.Write(symbolsBytes); err != nil {
+			return nil, errors.Wrap(err, "appending structured metadata symbols")
+		}
+	}
+
 	if err := compressedWriter.Close(); err != nil {
 		return nil, errors.Wrap(err, "flushing pending compress buffer")
 	}
