@@ -415,10 +415,7 @@ func NewStringLabelFilter(m *labels.Matcher) LabelFilterer {
 		return &NoopLabelFilter{m}
 	}
 
-	return &LineFilterLabelFilter{
-		Matcher: m,
-		Filter:  f,
-	}
+	return NewLineFilterLabelFilter(m, f)
 }
 
 func (s *StringLabelFilter) Process(_ int64, line []byte, lbs *LabelsBuilder) ([]byte, bool) {
@@ -444,7 +441,18 @@ func (s *StringLabelFilter) RequiredLabelNames() []string {
 // LineFilterLabelFilter filters the desired label using an optimized line filter
 type LineFilterLabelFilter struct {
 	*labels.Matcher
-	Filter Filterer
+	Filter    Filterer
+	wantKey   packedLiteral
+	wantValue packedLiteral
+}
+
+func NewLineFilterLabelFilter(m *labels.Matcher, f Filterer) *LineFilterLabelFilter {
+	return &LineFilterLabelFilter{
+		Matcher:   m,
+		Filter:    f,
+		wantKey:   newPackedLiteral(m.Name),
+		wantValue: newPackedLiteral(m.Value),
+	}
 }
 
 // overrides the matcher.String() function in case there is a regexpFilter
@@ -468,7 +476,48 @@ func (s *LineFilterLabelFilter) Process(_ int64, line []byte, lbs *LabelsBuilder
 }
 
 func (s *LineFilterLabelFilter) ProcessBatch(b *ArrowBatch) *ArrowBatch {
-	return processStageLineByLine(b, s.Process)
+	if b.StructuredMetadataView == nil {
+		return processStageLineByLine(b, s.Process)
+	}
+
+	if s.Matcher.Type != labels.MatchEqual {
+		return processStageLineByLine(b, s.Process)
+	}
+
+	offs, keys, vals := b.StructuredMetadataColumns()
+	kh := PackedHeaderTraits.CastFromBytes(keys.Data().Buffers()[1].Bytes())
+	vh := PackedHeaderTraits.CastFromBytes(vals.Data().Buffers()[1].Bytes())
+	// The data buffers follow the validity and the header buffer. A header that
+	// is not inline refers to them by index.
+	keyBuffers := keys.Data().Buffers()[2:]
+	valueBuffers := vals.Data().Buffers()[2:]
+	keyLo, valueLo := s.wantKey.lo(), s.wantValue.lo()
+
+	outSelIndex := 0
+	// TODO: handle b.Selection == nil as all selected
+	for selIndex := 0; selIndex < len(b.Selection); selIndex++ {
+		sel := b.Selection[selIndex]
+		// A missing label compares as an empty value, like labelValue does in Process.
+		// The default is replaced as soon as the key is found.
+		match := s.Value == ""
+		for o := offs[sel]; o < offs[sel+1]; o++ {
+			// Length and prefix first. Only a header that passes can be equal.
+			if kh[o].Lo != keyLo || !s.wantKey.restEquals(&kh[o], keyBuffers) {
+				continue
+			}
+			match = vh[o].Lo == valueLo && s.wantValue.restEquals(&vh[o], valueBuffers)
+			break
+		}
+
+		if match {
+			b.Selection[outSelIndex] = b.Selection[selIndex]
+			outSelIndex++
+		}
+	}
+
+	b.Selection = b.Selection[:outSelIndex]
+
+	return b
 }
 
 // Hints implements Stage.

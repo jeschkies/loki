@@ -253,13 +253,11 @@ func cloneLabelFilterer(filter log.LabelFilterer) log.LabelFilterer {
 		}
 		return copied
 	case *log.LineFilterLabelFilter:
-		copied := &log.LineFilterLabelFilter{
-			Filter: concrete.Filter,
+		if concrete.Matcher == nil {
+			return &log.LineFilterLabelFilter{Filter: concrete.Filter}
 		}
-		if concrete.Matcher != nil {
-			copied.Matcher = mustNewMatcher(concrete.Type, concrete.Name, concrete.Value)
-		}
-		return copied
+		// Use the factory so the precomputed ViewHeaders used by ProcessBatch are set.
+		return log.NewLineFilterLabelFilter(mustNewMatcher(concrete.Type, concrete.Name, concrete.Value), concrete.Filter)
 	case *log.IPLabelFilter:
 		return log.NewIPLabelFilter(concrete.Pattern, concrete.Label, concrete.Ty)
 	}

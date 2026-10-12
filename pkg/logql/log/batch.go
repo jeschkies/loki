@@ -11,7 +11,8 @@ type ArrowBatch struct {
 	LineColumn *array.String // TODO: use byte array instead
 	Samples    *array.Float64
 
-	StructuredMetadata []labels.Labels // TODO: decide on label representation
+	StructuredMetadata     []labels.Labels
+	StructuredMetadataView *array.Map
 
 	// Selection lists the indices of rows still under consideration, in
 	// ascending order. A nil Selection means all rows are selected.
@@ -41,6 +42,12 @@ func (b *ArrowBatch) GetLineOffset(i int) int {
 
 	base := int(b.LineColumn.ValueOffset(0))                 // 0 for unsliced arrays
 	return int(b.LineColumn.ValueOffset(offsetIndex)) - base // index of line start
+}
+
+func (b *ArrowBatch) StructuredMetadataColumns() (offs []int32, keys, vals *array.StringView) {
+	m := b.StructuredMetadataView
+	offs = m.Offsets()[m.Data().Offset():] // honor slice offset; row i is offs[i], offs[i+1]
+	return offs, m.Keys().(*array.StringView), m.Items().(*array.StringView)
 }
 
 type BatchBuilder struct {

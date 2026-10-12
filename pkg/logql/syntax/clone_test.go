@@ -95,10 +95,7 @@ func TestCloneStringLabelFilter(t *testing.T) {
 		},
 		"filterer": {
 			expr: &LabelFilterExpr{
-				LabelFilterer: &log.LineFilterLabelFilter{
-					Matcher: mustNewMatcher(labels.MatchEqual, "foo", "bar"),
-					Filter:  log.ExistsFilter,
-				},
+				LabelFilterer: log.NewLineFilterLabelFilter(mustNewMatcher(labels.MatchEqual, "foo", "bar"), log.ExistsFilter),
 			},
 		},
 	} {
