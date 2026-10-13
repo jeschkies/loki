@@ -7,6 +7,7 @@ import (
 	"unsafe"
 
 	"github.com/apache/arrow-go/v18/arrow"
+	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 )
 
@@ -46,6 +47,25 @@ func (h *PackedHeader) BufferIndex() int32 { return int32(h.Hi) }
 
 // BufferOffset returns the offset into the data buffer of a string that is not inline.
 func (h *PackedHeader) BufferOffset() int32 { return int32(h.Hi >> 32) }
+
+// NewPackedHeader returns the header of the string s. A string that is not
+// inline lives in the data buffer bufferIndex of the array at byte offset
+// offset. They are ignored for an inline string.
+func NewPackedHeader(s []byte, bufferIndex, offset int32) PackedHeader {
+	var raw [PackedHeaderSizeBytes]byte
+	binary.LittleEndian.PutUint32(raw[0:4], uint32(len(s)))
+	if len(s) <= packedHeaderInlineLimit {
+		copy(raw[4:], s)
+	} else {
+		copy(raw[4:8], s)
+		binary.LittleEndian.PutUint32(raw[8:12], uint32(bufferIndex))
+		binary.LittleEndian.PutUint32(raw[12:16], uint32(offset))
+	}
+	return PackedHeader{
+		Lo: binary.LittleEndian.Uint64(raw[0:8]),
+		Hi: binary.LittleEndian.Uint64(raw[8:16]),
+	}
+}
 
 // PackedHeaderSizeBytes is the size of a PackedHeader. It is the same as arrow.ViewHeaderSizeBytes.
 const PackedHeaderSizeBytes = int(unsafe.Sizeof(PackedHeader{}))
@@ -127,4 +147,35 @@ func (l *packedLiteral) restEquals(h *PackedHeader, buffers []*memory.Buffer) bo
 	}
 	offset := h.BufferOffset()
 	return bytes.Equal(buffers[h.BufferIndex()].Bytes()[offset:offset+int32(len(l.lit))], l.lit)
+}
+
+// NewStructuredMetadataMap returns the Map<StringView, StringView> of
+// ArrowBatch.StructuredMetadataView without copying its arguments.
+//
+// Row i has the pairs offsets[i] to offsets[i+1]-1 of keys and values, so
+// offsets has one more element than there are rows. Headers of strings that are
+// not inline refer to dataBuffers, which keys and values share. The caller must
+// not modify any of the arguments while the array is in use.
+func NewStructuredMetadataMap(offsets []int32, keys, values []PackedHeader, dataBuffers ...*memory.Buffer) *array.Map {
+	if len(offsets) == 0 || len(keys) != len(values) || int(offsets[len(offsets)-1]) != len(keys) {
+		panic("structured metadata map: offsets, keys and values do not match")
+	}
+
+	columnData := func(headers []PackedHeader) *array.Data {
+		buffers := append([]*memory.Buffer{nil, memory.NewBufferBytes(PackedHeaderTraits.CastToBytes(headers))}, dataBuffers...)
+		return array.NewData(arrow.BinaryTypes.StringView, len(headers), buffers, nil, 0, 0)
+	}
+	keyData, valueData := columnData(keys), columnData(values)
+	defer keyData.Release()
+	defer valueData.Release()
+
+	mapType := arrow.MapOf(arrow.BinaryTypes.StringView, arrow.BinaryTypes.StringView)
+	entries := array.NewData(mapType.Elem(), len(keys), []*memory.Buffer{nil}, []arrow.ArrayData{keyData, valueData}, 0, 0)
+	defer entries.Release()
+
+	offsetBytes := arrow.Int32Traits.CastToBytes(offsets)
+	data := array.NewData(mapType, len(offsets)-1,
+		[]*memory.Buffer{nil, memory.NewBufferBytes(offsetBytes)}, []arrow.ArrayData{entries}, 0, 0)
+	defer data.Release()
+	return array.NewMapData(data)
 }

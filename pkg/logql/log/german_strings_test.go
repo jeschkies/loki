@@ -123,3 +123,52 @@ func TestPackedLiteral_Equals(t *testing.T) {
 		})
 	}
 }
+
+// NewPackedHeader must build the same headers as an Arrow builder, for inline
+// strings and for strings in the data buffers.
+func TestNewPackedHeader_MatchesBuilder(t *testing.T) {
+	var values []string
+	for n := 0; n <= 40; n++ {
+		values = append(values, strings.Repeat("x", n)+fmt.Sprint(n%10))
+	}
+	values = append(values, "", "a", "abcd", "abcde", "twelve bytes", "thirteen byte")
+
+	builder := array.NewStringViewBuilder(memory.DefaultAllocator)
+	defer builder.Release()
+	for _, v := range values {
+		builder.Append(v)
+	}
+	arr := builder.NewStringViewArray()
+	defer arr.Release()
+	headers := PackedHeaderTraits.CastFromBytes(arr.Data().Buffers()[1].Bytes())
+
+	for i, v := range values {
+		want := headers[i]
+		got := NewPackedHeader([]byte(v), want.BufferIndex(), want.BufferOffset())
+		require.Equal(t, want, got, "value %q", v)
+	}
+}
+
+func TestNewStructuredMetadataMap(t *testing.T) {
+	data := []byte("a-string-that-is-not-inline")
+	long := NewPackedHeader(data, 0, 0)
+	short := NewPackedHeader([]byte("app"), 0, 0)
+
+	m := NewStructuredMetadataMap(
+		[]int32{0, 2, 2, 3},
+		[]PackedHeader{short, short, short},
+		[]PackedHeader{long, short, long},
+		memory.NewBufferBytes(data),
+	)
+	defer m.Release()
+
+	require.Equal(t, 3, m.Len())
+	offs, keys, vals := (&ArrowBatch{StructuredMetadataView: m}).StructuredMetadataColumns()
+	require.Equal(t, []int32{0, 2, 2, 3}, offs[:4])
+	require.Equal(t, "app", keys.Value(0))
+	require.Equal(t, string(data), vals.Value(0))
+	require.Equal(t, "app", vals.Value(1))
+	require.Equal(t, string(data), vals.Value(2))
+
+	require.Panics(t, func() { NewStructuredMetadataMap([]int32{0, 5}, []PackedHeader{short}, []PackedHeader{short}) })
+}
