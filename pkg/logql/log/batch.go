@@ -14,6 +14,17 @@ type ArrowBatch struct {
 	StructuredMetadata     []labels.Labels
 	StructuredMetadataView *array.Map
 
+	// ParsedLabelsView holds the labels extracted by a parser stage such as
+	// logfmt. It has one entry for every row of the batch, selected or not, so
+	// that Selection indexes it like any other column. Rows that are not
+	// selected have no pairs.
+	//
+	// A key can occur more than once in a row, for example when different keys
+	// are sanitized to the same name. The first occurrence wins, as it does when
+	// a parser sets the labels of a LabelsBuilder one by one, which skips keys it
+	// has already extracted. The column itself keeps all of them.
+	ParsedLabelsView *array.Map
+
 	// Selection lists the indices of rows still under consideration, in
 	// ascending order. A nil Selection means all rows are selected.
 	Selection []int
@@ -33,19 +44,17 @@ func (b *ArrowBatch) NewBuilder() *BatchBuilder {
 	return builder
 }
 
-func (b *ArrowBatch) GetLineOffset(i int) int {
-	if i >= len(b.Selection) {
-		return -1
-	}
-
-	offsetIndex := b.Selection[i]
-
-	base := int(b.LineColumn.ValueOffset(0))                 // 0 for unsliced arrays
-	return int(b.LineColumn.ValueOffset(offsetIndex)) - base // index of line start
+func (b *ArrowBatch) StructuredMetadataColumns() (offs []int32, keys, vals *array.StringView) {
+	return mapColumns(b.StructuredMetadataView)
 }
 
-func (b *ArrowBatch) StructuredMetadataColumns() (offs []int32, keys, vals *array.StringView) {
-	m := b.StructuredMetadataView
+// ParsedLabelsColumns returns the columns of ParsedLabelsView. See
+// StructuredMetadataColumns.
+func (b *ArrowBatch) ParsedLabelsColumns() (offs []int32, keys, vals *array.StringView) {
+	return mapColumns(b.ParsedLabelsView)
+}
+
+func mapColumns(m *array.Map) (offs []int32, keys, vals *array.StringView) {
 	offs = m.Offsets()[m.Data().Offset():] // honor slice offset; row i is offs[i], offs[i+1]
 	return offs, m.Keys().(*array.StringView), m.Items().(*array.StringView)
 }

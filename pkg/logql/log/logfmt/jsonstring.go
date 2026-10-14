@@ -137,3 +137,82 @@ func unquoteBytes(s []byte) (t []byte, ok bool) {
 	}
 	return b[0:w], true
 }
+
+// appendUnquoted appends the unquoted form of s to dst. s is the content of a
+// quoted value without the quotes. It returns false, and dst as it was, if s is
+// not valid.
+//
+// It decodes like unquoteBytes, but writes to dst instead of allocating. The
+// result is at most 3*len(s) bytes longer than dst: every byte of s produces at
+// most one rune, and the longest is the 3 bytes of the replacement rune for an
+// invalid byte. With that much spare capacity in dst, appendUnquoted does not
+// allocate.
+func appendUnquoted(dst, s []byte) ([]byte, bool) {
+	start := len(dst)
+	for r := 0; r < len(s); {
+		switch c := s[r]; {
+		case c == '\\':
+			r++
+			if r >= len(s) {
+				return dst[:start], false
+			}
+			switch s[r] {
+			default:
+				return dst[:start], false
+			case '"', '\\', '/', '\'':
+				dst = append(dst, s[r])
+				r++
+			case 'b':
+				dst = append(dst, '\b')
+				r++
+			case 'f':
+				dst = append(dst, '\f')
+				r++
+			case 'n':
+				dst = append(dst, '\n')
+				r++
+			case 'r':
+				dst = append(dst, '\r')
+				r++
+			case 't':
+				dst = append(dst, '\t')
+				r++
+			case 'u':
+				r--
+				rr := getu4(s[r:])
+				if rr < 0 {
+					return dst[:start], false
+				}
+				r += 6
+				if utf16.IsSurrogate(rr) {
+					rr1 := getu4(s[r:])
+					if dec := utf16.DecodeRune(rr, rr1); dec != unicode.ReplacementChar {
+						// A valid pair; consume.
+						r += 6
+						dst = utf8.AppendRune(dst, dec)
+						break
+					}
+					// Invalid surrogate; fall back to replacement rune.
+					rr = unicode.ReplacementChar
+				}
+				dst = utf8.AppendRune(dst, rr)
+			}
+
+		// Unescaped quote is invalid.
+		case c == '"':
+			return dst[:start], false
+
+		// ASCII
+		case c < utf8.RuneSelf:
+			dst = append(dst, c)
+			r++
+
+		// Coerce to well-formed UTF-8.
+		default:
+			rr, size := utf8.DecodeRune(s[r:])
+			r += size
+			dst = utf8.AppendRune(dst, rr)
+		}
+	}
+	return dst, true
+}

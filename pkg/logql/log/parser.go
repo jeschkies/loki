@@ -8,6 +8,8 @@ import (
 	"unicode/utf8"
 	"unsafe"
 
+	"github.com/apache/arrow-go/v18/arrow"
+	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/grafana/jsonparser"
 
 	"github.com/grafana/loki/v3/pkg/logql/log/jsonexpr"
@@ -387,15 +389,24 @@ type LogfmtParser struct {
 	keepEmpty bool
 	dec       *logfmt.Decoder
 	keys      internedStringSet
+
+	// State of ProcessBatch, which like the decoder is not safe for concurrent use.
+	batchDec    *logfmt.Decoder         // leaves escaped values to be unquoted into the extra buffer
+	pairsPerRow int                     // pairs per selected row of the last batch, to presize the next
+	sanitized   map[string]sanitizedKey // by raw key, only for keys that need sanitizing. Reset for every batch.
 }
 
 // NewLogfmtParser creates a parser that can extract labels from a logfmt log line.
 // Each keyval is extracted into a respective label.
 func NewLogfmtParser(strict, keepEmpty bool) *LogfmtParser {
+	batchDec := logfmt.NewDecoder(nil)
+	batchDec.SetDeferUnquote(true)
+
 	return &LogfmtParser{
 		strict:    strict,
 		keepEmpty: keepEmpty,
 		dec:       logfmt.NewDecoder(nil),
+		batchDec:  batchDec,
 		keys:      internedStringSet{},
 	}
 }
@@ -470,8 +481,162 @@ func (l *LogfmtParser) Process(_ int64, line []byte, lbs *LabelsBuilder) ([]byte
 	return line, true
 }
 
+// sanitizedKey is the result of sanitizing a key, remembered for the batch.
+type sanitizedKey struct {
+	header PackedHeader
+	ok     bool // false if sanitizing leaves nothing, the pair is dropped
+}
+
+// ProcessBatch extracts the logfmt pairs of the selected lines into
+// ParsedLabelsView.
+//
+// Keys and values that are unchanged by parsing are not copied. Their headers
+// point into the line column. Everything else is written once to an extra buffer
+// shared by the batch.
 func (l *LogfmtParser) ProcessBatch(b *ArrowBatch) *ArrowBatch {
-	return processStageLineByLine(b, l.Process)
+	// TODO: support parser hints
+	// TODO: add the _extracted suffix to keys that are stream labels or structured metadata
+	/*
+		parserHints := lbs.ParserLabelHints()
+		if parserHints.NoLabels() {
+			return line, true
+		}
+	*/
+	rows := b.LineColumn.Len()
+
+	// All buffers come from ArrowAllocator and go back to it when the resulting
+	// map is released. The lists start as big as the last batch needed.
+	offsetsBuf := memory.NewResizableBuffer(ArrowAllocator)
+	offsetsBuf.ResizeNoShrink(arrow.Int32Traits.BytesRequired(rows + 1))
+	offsets := arrow.Int32Traits.CastFromBytes(offsetsBuf.Bytes())
+	keys := newHeaderList(len(b.Selection) * l.pairsPerRow)
+	values := newHeaderList(len(b.Selection) * l.pairsPerRow)
+	var extra extraBuffer
+	if l.sanitized == nil {
+		l.sanitized = map[string]sanitizedKey{}
+	}
+	clear(l.sanitized) // the headers of the last batch point into its extra buffer
+
+	next := 0 // first row whose offset is not set yet
+	for _, sel := range b.Selection {
+		// Rows before sel that were not selected have no pairs.
+		for ; next <= sel; next++ {
+			offsets[next] = int32(len(keys.s))
+		}
+
+		line := unsafeGetBytes(b.LineColumn.Value(sel))
+		lineOffset := int32(b.LineColumn.ValueOffset(sel))
+		l.batchDec.Reset(line)
+	pairs:
+		for !l.batchDec.EOL() {
+			ok := l.batchDec.ScanKeyval()
+			if !ok {
+				// for strict parsing, do not continue on errs
+				if l.strict {
+					break
+				} else {
+					continue
+				}
+			}
+
+			valueStart, valueEnd := l.batchDec.ValueRange()
+			if !l.keepEmpty && valueEnd == valueStart {
+				continue
+			}
+
+			// The value comes before the key. Process fails on an invalid escape
+			// sequence in the value before it looks at the key, and unquoting is
+			// where the batch decoder finds out about it.
+			var value PackedHeader
+			switch {
+			case !l.batchDec.ValueEscaped() && !l.batchDec.ValueRuneError():
+				value = NewPackedHeader(line[valueStart:valueEnd], lineBufferIndex, lineOffset+int32(valueStart))
+			case !l.batchDec.ValueEscaped():
+				value = extra.header(bytes.Map(removeInvalidUtf, l.batchDec.Value()))
+			default:
+				// Unquote straight into the extra buffer. The unquoted value is at
+				// most three times as long as the raw one.
+				dst := extra.reserve(3 * (valueEnd - valueStart))
+				unquoted, ok := l.batchDec.AppendValue(dst)
+				if !ok {
+					// for strict parsing, do not continue on errs
+					if l.strict {
+						break pairs // not just out of the switch
+					}
+					continue
+				}
+				extra.commit(unquoted)
+
+				value = NewPackedHeader(unquoted[len(dst):], extraBufferIndex, int32(len(dst)))
+				if bytes.ContainsRune(unquoted[len(dst):], utf8.RuneError) {
+					// Rare. The replaced value is not longer, but it is a new slice.
+					replaced := bytes.Map(removeInvalidUtf, unquoted[len(dst):])
+					extra.commit(dst) // drop the unquoted bytes
+					value = extra.header(replaced)
+				}
+			}
+
+			var key PackedHeader
+			keyStart, keyEnd := l.batchDec.KeyRange()
+			if !l.batchDec.KeyNeedsSanitization() {
+				key = NewPackedHeader(line[keyStart:keyEnd], lineBufferIndex, lineOffset+int32(keyStart))
+			} else {
+				raw := line[keyStart:keyEnd]
+				s, ok := l.sanitized[string(raw)] // does not allocate
+				if !ok {
+					name := sanitizeLabelKey(string(raw), true)
+					if len(name) > 0 {
+						s = sanitizedKey{header: extra.header(unsafeGetBytes(name)), ok: true}
+					}
+					if len(l.sanitized) < MaxInternedStrings {
+						l.sanitized[string(raw)] = s
+					}
+				}
+				if !s.ok {
+					continue
+				}
+				key = s.header
+			}
+
+			keys.append(key)
+			values.append(value)
+		}
+
+		if l.strict && l.batchDec.Err() != nil {
+			// Same as addErrLabel without parser hints.
+			keys.append(extra.header(unsafeGetBytes(logqlmodel.ErrorLabel)))
+			values.append(extra.header(unsafeGetBytes(errLogfmt)))
+			keys.append(extra.header(unsafeGetBytes(logqlmodel.ErrorDetailsLabel)))
+			values.append(extra.header(unsafeGetBytes(l.batchDec.Err().Error())))
+		}
+	}
+	for ; next <= rows; next++ {
+		offsets[next] = int32(len(keys.s))
+	}
+	if len(b.Selection) > 0 {
+		l.pairsPerRow = (len(keys.s) + len(b.Selection) - 1) / len(b.Selection)
+	}
+
+	dataBuffers := []*memory.Buffer{b.LineColumn.Data().Buffers()[2]}
+	extraBuf := extra.finish()
+	if extraBuf != nil {
+		dataBuffers = append(dataBuffers, extraBuf)
+	}
+
+	numPairs := len(keys.s)
+	keysBuf, valuesBuf := keys.finish(), values.finish()
+	out := *b
+	out.ParsedLabelsView = NewStructuredMetadataMapFromBuffers(offsetsBuf, keysBuf, valuesBuf, rows, numPairs, dataBuffers...)
+
+	// The map holds its own references now. Dropping ours leaves it the owner, so
+	// the buffers go back to the pool when the map is released.
+	offsetsBuf.Release()
+	keysBuf.Release()
+	valuesBuf.Release()
+	if extraBuf != nil {
+		extraBuf.Release()
+	}
+	return &out
 }
 
 // Hints implements Stage.
@@ -893,7 +1058,6 @@ func (u *UnpackParser) unpack(entry []byte, lbs *LabelsBuilder) ([]byte, error) 
 
 		return nil
 	})
-
 	if err != nil {
 		return nil, err
 	}

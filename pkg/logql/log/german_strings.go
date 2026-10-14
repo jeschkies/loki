@@ -161,21 +161,35 @@ func NewStructuredMetadataMap(offsets []int32, keys, values []PackedHeader, data
 		panic("structured metadata map: offsets, keys and values do not match")
 	}
 
-	columnData := func(headers []PackedHeader) *array.Data {
-		buffers := append([]*memory.Buffer{nil, memory.NewBufferBytes(PackedHeaderTraits.CastToBytes(headers))}, dataBuffers...)
-		return array.NewData(arrow.BinaryTypes.StringView, len(headers), buffers, nil, 0, 0)
+	return NewStructuredMetadataMapFromBuffers(
+		memory.NewBufferBytes(arrow.Int32Traits.CastToBytes(offsets)),
+		memory.NewBufferBytes(PackedHeaderTraits.CastToBytes(keys)),
+		memory.NewBufferBytes(PackedHeaderTraits.CastToBytes(values)),
+		len(offsets)-1, len(keys), dataBuffers...)
+}
+
+// NewStructuredMetadataMapFromBuffers is NewStructuredMetadataMap for buffers
+// that are already in Arrow's representation: offsets holds numRows+1 int32,
+// keys and values hold numPairs headers each.
+//
+// The array retains every buffer it uses. The caller keeps its own references
+// and releases them when it is done, which lets a pooled buffer go back to its
+// allocator once the array is released. The buffers must not be modified while
+// the array is in use.
+func NewStructuredMetadataMapFromBuffers(offsets, keys, values *memory.Buffer, numRows, numPairs int, dataBuffers ...*memory.Buffer) *array.Map {
+	columnData := func(headers *memory.Buffer) *array.Data {
+		buffers := append([]*memory.Buffer{nil, headers}, dataBuffers...)
+		return array.NewData(arrow.BinaryTypes.StringView, numPairs, buffers, nil, 0, 0)
 	}
 	keyData, valueData := columnData(keys), columnData(values)
 	defer keyData.Release()
 	defer valueData.Release()
 
 	mapType := arrow.MapOf(arrow.BinaryTypes.StringView, arrow.BinaryTypes.StringView)
-	entries := array.NewData(mapType.Elem(), len(keys), []*memory.Buffer{nil}, []arrow.ArrayData{keyData, valueData}, 0, 0)
+	entries := array.NewData(mapType.Elem(), numPairs, []*memory.Buffer{nil}, []arrow.ArrayData{keyData, valueData}, 0, 0)
 	defer entries.Release()
 
-	offsetBytes := arrow.Int32Traits.CastToBytes(offsets)
-	data := array.NewData(mapType, len(offsets)-1,
-		[]*memory.Buffer{nil, memory.NewBufferBytes(offsetBytes)}, []arrow.ArrayData{entries}, 0, 0)
+	data := array.NewData(mapType, numRows, []*memory.Buffer{nil, offsets}, []arrow.ArrayData{entries}, 0, 0)
 	defer data.Release()
 	return array.NewMapData(data)
 }
