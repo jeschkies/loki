@@ -476,7 +476,7 @@ func (s *LineFilterLabelFilter) Process(_ int64, line []byte, lbs *LabelsBuilder
 }
 
 func (s *LineFilterLabelFilter) ProcessBatch(b *ArrowBatch) *ArrowBatch {
-	if b.StructuredMetadataView == nil {
+	if b.ParsedLabelsView == nil {
 		return processStageLineByLine(b, s.Process)
 	}
 
@@ -484,7 +484,7 @@ func (s *LineFilterLabelFilter) ProcessBatch(b *ArrowBatch) *ArrowBatch {
 		return processStageLineByLine(b, s.Process)
 	}
 
-	offs, keys, vals := b.StructuredMetadataColumns()
+	offs, keys, vals := b.ParsedLabelsColumns()
 	kh := PackedHeaderTraits.CastFromBytes(keys.Data().Buffers()[1].Bytes())
 	vh := PackedHeaderTraits.CastFromBytes(vals.Data().Buffers()[1].Bytes())
 	// The data buffers follow the validity and the header buffer. A header that

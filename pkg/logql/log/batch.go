@@ -25,6 +25,17 @@ type ArrowBatch struct {
 	// has already extracted. The column itself keeps all of them.
 	ParsedLabelsView *array.Map
 
+	// BaseLabels are the labels of the stream the rows belong to, as the pipeline
+	// reports them with StreamPipeline.BaseLabels. A nil value means the stream
+	// has no labels. See LabelsResult.
+	BaseLabels LabelsResult
+
+	// LabelsCache remembers the results of LabelsResult. If it is nil, LabelsResult
+	// creates a cache for the batch on its first call. A cache that lives as long as
+	// the stream pipeline lets the batches of a stream share their results. It must
+	// only be shared by batches of one stream, see BaseLabels.
+	LabelsCache *LabelsResultCache
+
 	// Selection lists the indices of rows still under consideration, in
 	// ascending order. A nil Selection means all rows are selected.
 	Selection []int

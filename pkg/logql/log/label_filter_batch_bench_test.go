@@ -62,7 +62,7 @@ func benchmarkLabelFilter(b *testing.B, key, value string, entries, numLabels, m
 
 	// Verify both paths agree before timing anything.
 	want := filterByProcess(pipeline, lbs, full, make([]int, 0, entries))
-	check := &ArrowBatch{StructuredMetadataView: newMetadataMap(b, rows), Selection: append([]int(nil), full...)}
+	check := &ArrowBatch{ParsedLabelsView: newMetadataMap(b, rows), Selection: append([]int(nil), full...)}
 	require.Equal(b, want, pipeline.ProcessBatch(check).Selection)
 
 	b.Run("impl=Process", func(b *testing.B) {
@@ -77,7 +77,7 @@ func benchmarkLabelFilter(b *testing.B, key, value string, entries, numLabels, m
 	})
 
 	b.Run("impl=ProcessBatch", func(b *testing.B) {
-		batch := &ArrowBatch{StructuredMetadataView: newMetadataMap(b, rows)}
+		batch := &ArrowBatch{ParsedLabelsView: newMetadataMap(b, rows)}
 		sel := make([]int, entries)
 
 		b.ReportAllocs()

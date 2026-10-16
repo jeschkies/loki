@@ -112,6 +112,11 @@ func benchmarkFilterBlock(b *testing.B, blockSize int, enc compression.Codec, ke
 		defer batch.LineColumn.Release()
 		defer batch.StructuredMetadataView.Release()
 
+		// The label filter reads the parsed labels, not the structured metadata. This benchmark
+		// filters the structured metadata as if they were parsed. It is the same array, so it
+		// is only released once, through StructuredMetadataView.
+		batch.ParsedLabelsView = batch.StructuredMetadataView
+
 		// TODO: LineFilterLabelFilter.ProcessBatch does not handle a nil Selection yet.
 		batch.Selection = make([]int, numEntries)
 		for i := range batch.Selection {

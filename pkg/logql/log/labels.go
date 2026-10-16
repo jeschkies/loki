@@ -8,6 +8,7 @@ import (
 	"github.com/prometheus/prometheus/model/labels"
 
 	"github.com/grafana/loki/v3/pkg/logqlmodel"
+	"github.com/grafana/loki/v3/pkg/util/labelpool"
 )
 
 const MaxInternedStrings = 1024
@@ -55,16 +56,21 @@ func (l labelsResult) String() string {
 }
 
 func (l labelsResult) Labels() labels.Labels {
-	size := l.stream.Len() + l.structuredMetadata.Len() + l.parsed.Len()
-	b := labels.NewScratchBuilder(size)
+	return mergeCategories(l.stream, l.structuredMetadata, l.parsed)
+}
 
-	l.stream.Range(func(l labels.Label) {
+// mergeCategories returns the labels of all categories as one sorted set.
+func mergeCategories(stream, structuredMetadata, parsed labels.Labels) labels.Labels {
+	b := labelpool.Get()
+	defer labelpool.Put(b)
+
+	stream.Range(func(l labels.Label) {
 		b.Add(l.Name, l.Value)
 	})
-	l.structuredMetadata.Range(func(l labels.Label) {
+	structuredMetadata.Range(func(l labels.Label) {
 		b.Add(l.Name, l.Value)
 	})
-	l.parsed.Range(func(l labels.Label) {
+	parsed.Range(func(l labels.Label) {
 		b.Add(l.Name, l.Value)
 	})
 

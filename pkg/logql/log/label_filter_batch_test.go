@@ -180,8 +180,8 @@ func TestLineFilterLabelFilter_ProcessBatchStructuredMetadata(t *testing.T) {
 			require.IsType(t, &LineFilterLabelFilter{}, f)
 
 			b := &ArrowBatch{
-				StructuredMetadataView: m,
-				Selection:              tc.selection,
+				ParsedLabelsView: m,
+				Selection:        tc.selection,
 			}
 
 			got := f.ProcessBatch(b)
